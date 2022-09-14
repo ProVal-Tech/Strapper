@@ -4,7 +4,7 @@
 RootModule = 'Strapper.psm1'
 
 # Version number of this module.
-ModuleVersion = '0.0.1'
+ModuleVersion = '1.0.0'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
@@ -22,10 +22,10 @@ CompanyName = 'ProVal Tech'
 Copyright = '(c) ProVal Tech. All rights reserved.'
 
 # Description of the functionality provided by this module
-# Description = ''
+Description = 'A cross-platform helper module for PowerShell.'
 
 # Minimum version of the PowerShell engine required by this module
-# PowerShellVersion = ''
+PowerShellVersion = '5.1'
 
 # Name of the PowerShell host required by this module
 # PowerShellHostName = ''
@@ -141,7 +141,7 @@ PrivateData = @{
 } # End of PrivateData hashtable
 
 # HelpInfo URI of this module
-# HelpInfoURI = ''
+HelpInfoURI = 'https://github.com/ProVal-Tech/Strapper/issues'
 
 # Default prefix for commands exported from this module. Override the default prefix using Import-Module -Prefix.
 # DefaultCommandPrefix = ''

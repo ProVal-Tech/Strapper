@@ -19,7 +19,7 @@ function Write-Log {
         INIT    - Outputs to the log file and console.
         Default (Any other string) - Outputs to the log file and console.
     .NOTES
-        If this function is run before running Set-Environment (or setting the variables $logPath and $dataPath and $errorPath) then it will output a log file to the current directory in the format YYYYMMDD-log/data/error.txt
+        If this function is run on the console then it will output a log file to the current directory in the format YYYYMMDD-log/data/error.txt
     #>
     [CmdletBinding()]
     param (
