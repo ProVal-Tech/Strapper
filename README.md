@@ -27,7 +27,7 @@ if (!(Get-Module -ListAvailable -Name PowerShellGet | Where-Object { $_.Version.
 Register-PSResourceRepository -Name ProValGitHub -URL 'https://nuget.pkg.github.com/ProVal-Tech/index.json'
 
 # Install Strapper
-Install-PSResource -Name "Strapper" -Repository ProValGitHub
+Install-PSResource -Name "Strapper" -Repository ProValGitHub -TrustRepository -Credential (Get-Credential)
 
 # Optional: Remove the resource repository
 Unregister-PSResourceRepository -Name ProValGitHub
