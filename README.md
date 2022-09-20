@@ -11,26 +11,14 @@
 
 ## About
 
-Strapper is used as a general purpose toolbox for writing PowerShell scripts. It contains functions to assist with logging, registry management, installing other modules from GitHub, and more.
+Strapper is used as a general-purpose toolbox for writing PowerShell scripts. It contains functions to assist with logging, registry management, installing other modules from GitHub, and more.
 
 ## Getting Started
 
-Installing Strapper in PowerShell is easiest with [PowerShellGet v3](https://www.powershellgallery.com/packages/PowerShellGet/3.0.16-beta16) as it contains additional logic for installing modules from GitHub.
+Install from the PS Gallery
 
 ```powershell
-# Install the prerelease version of PowerShellGet if not already at version 3+.
-if (!(Get-Module -ListAvailable -Name PowerShellGet | Where-Object { $_.Version.Major -ge 3 })) {
-    Install-Module -Name PowerShellGet -AllowPrerelease -Force
-}
-
-# Register the ProVal GitHub repo
-Register-PSResourceRepository -Name ProValGitHub -URL 'https://nuget.pkg.github.com/ProVal-Tech/index.json'
-
-# Install Strapper
-Install-PSResource -Name "Strapper" -Repository ProValGitHub -TrustRepository -Credential (Get-Credential)
-
-# Optional: Remove the resource repository
-Unregister-PSResourceRepository -Name ProValGitHub
+Install-Module -Name Strapper -Force
 ```
 
 ### Alternative Install
