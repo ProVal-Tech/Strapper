@@ -1,4 +1,33 @@
 function Install-GitHubModule {
+    <#
+    .SYNOPSIS
+        Install a PowerShell module from a GitHub repository.
+    .DESCRIPTION
+        Install a PowerShell module from a GitHub repository via PowerShellGet v3.
+        
+        This script requires a separate Azure function that returns a GitHub Personal Access Token based on two Base64 encoded scripts passed to it.
+    .PARAMETER Name
+        The name of the Github module to install.
+    .PARAMETER Username
+        The username of the Github user to authenticate with.
+    .PARAMETER GithubPackageUri
+        The URI to the Github Nuget package repository.
+    .PARAMETER AzureGithubPATUri
+        The URI to the Azure function that will return the PAT.
+    .PARAMETER AzureGithubPATFunctionKey
+        The function key for the Azure function.
+    .PARAMETER CallingScriptPath
+        The path to the script that is attempting to install the module.
+    .EXAMPLE
+        Install-GitHubModule `
+            -Name MyGithubModule `
+            -Username GithubUser `
+            -GitHubPackageUri 'https://nuget.pkg.github.com/GithubUser/index.json' `
+            -AzureGithubPATUri 'https://pat-function-subdomain.azurewebsites.net/api/FunctionName' `
+            -AzureGithubPATFunctionKey 'MyFunctionKey' `
+            -CallingScriptPath 'C:\users\githubuser\scripts\MyCallingScript.ps1'
+        Import-Module -Name MyGithubModule
+    #>
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)][string]$Name,
@@ -15,28 +44,43 @@ function Install-GitHubModule {
     Write-Debug -Message "Azure Function Uri: $AzureGithubPATUri"
     Write-Debug -Message "Azure Function Key: $AzureGithubPATFunctionKey"
     
+    # Install PowerShellGet v3+ if not already installed.
     Write-Debug -Message "Checking for PowerShellGet v3+"
     if (!(Get-Module -ListAvailable -Name PowerShellGet | Where-Object { $_.Version.Major -ge 3 })) {
         Write-Debug -Message "Installing PowerShellGet v3+"
         Install-Module -Name PowerShellGet -AllowPrerelease -Force
     }
+
+    # Encode the calling script to Base64
     Write-Debug -Message "Encoding $CallingScriptPath as Base64 string."
     $base64EncodedScript = [System.Convert]::ToBase64String([System.IO.File]::ReadAllBytes($CallingScriptPath))
-    Write-Debug -Message "Encoding $((Get-ChildItem (Get-Item (Get-Module -name Strapper).Path).Directory -Recurse -Filter "Install-GitHubModule.ps1" -File).FullName) as Base64 string."
-    $base64EncodedModuleMember = [System.Convert]::ToBase64String(
-        [System.IO.File]::ReadAllBytes(
-            (Get-ChildItem (Get-Item (Get-Module -name Strapper).Path).Directory -Recurse -Filter "Install-GitHubModule.ps1" -File).FullName
-        )
-    )
+
+    # Get 'Install-GitHubModule.ps1' path and encode to Base64
+    $moduleMemberPath = (Get-ChildItem (Get-Item (Get-Module -name Strapper).Path).Directory -Recurse -Filter "Install-GitHubModule.ps1" -File).FullName
+    Write-Debug -Message "Encoding $moduleMemberPath as Base64 string."
+    $base64EncodedModuleMember = [System.Convert]::ToBase64String([System.IO.File]::ReadAllBytes($moduleMemberPath))
     Write-Debug -Message "Registering '$GithubPackageUri' as temporary repo."
+
+    # Register the temporary 
     Register-PSResourceRepository -Name TempGithub -Uri $GithubPackageUri
+    Write-Debug -Message "Acquiring GitHub PAT"
+    $githubPAT = (
+        Invoke-RestMethod `
+            -Uri "$($AzureGithubPATUri)?code=$($AzureGithubPATFunctionKey)" `
+            -Method Post `
+            -Body $(
+                @{
+                    script = $base64EncodedScript
+                    moduleMember = $base64EncodedModuleMember
+                    extension = ".ps1"
+                } | ConvertTo-Json
+            ) `
+            -ContentType 'application/json'
+    ) | ConvertTo-SecureString -AsPlainText -Force
+    Write-Debug -Message "PAT Last 4: $($githubPAT[0..3])"
     Write-Debug -Message "Installing module '$Name'."
-    Install-PSResource -Name $Name -Repository TempGithub -Credential (
-        New-Object System.Management.Automation.PSCredential(
-            $Username,
-            (Invoke-RestMethod -Uri "$($AzureGithubPATUri)?code=$($AzureGithubPATFunctionKey)" -Method Post -Body $(@{ script = $base64EncodedScript; moduleMember = $base64EncodedModuleMember } | ConvertTo-Json) -ContentType 'application/json') | ConvertTo-SecureString -AsPlainText -Force
-        )
-    )
+
+    Install-PSResource -Name $Name -Repository TempGithub -Credential (New-Object System.Management.Automation.PSCredential($Username, $githubPAT))
     Write-Debug -Message "Unregistering '$GithubPackageUri'."
     Unregister-PSResourceRepository -Name TempGithub
 }
@@ -45,8 +89,8 @@ Write-Debug "Loaded Install-GitHubModule function."
 # SIG # Begin signature block
 # MIInSgYJKoZIhvcNAQcCoIInOzCCJzcCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUEBm0W+UpXkThy3BLMFxaH6q1
-# 7cSggiC2MIIF2DCCBMCgAwIBAgIRAOQnBJX2jJHW0Ox7SU6k3xwwDQYJKoZIhvcN
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUxA10w7ZjMPkO0AYgQe6/+qwb
+# nRaggiC2MIIF2DCCBMCgAwIBAgIRAOQnBJX2jJHW0Ox7SU6k3xwwDQYJKoZIhvcN
 # AQELBQAwfjELMAkGA1UEBhMCUEwxIjAgBgNVBAoTGVVuaXpldG8gVGVjaG5vbG9n
 # aWVzIFMuQS4xJzAlBgNVBAsTHkNlcnR1bSBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0
 # eTEiMCAGA1UEAxMZQ2VydHVtIFRydXN0ZWQgTmV0d29yayBDQTAeFw0xODA5MTEw
@@ -226,31 +270,31 @@ Write-Debug "Loaded Install-GitHubModule function."
 # dGVybWVkaWF0ZSBDQSBSU0EgUjECEHlcJMbs+LJ7AQD1+/722sgwCQYFKw4DAhoF
 # AKB4MBgGCisGAQQBgjcCAQwxCjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisG
 # AQQBgjcCAQQwHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcN
-# AQkEMRYEFO7Qn6d/FWirceb4HPPfKj+5fGMOMA0GCSqGSIb3DQEBAQUABIIBgJXG
-# qUSlhG7HqYE1xT6cEIiaM5d7u/U6t+Zq+eKXcOmgezdcyz1Ns5i1xifK9njy6H6n
-# dlUCJxZ3o/ey/3NO0yRknW/XO1lTjKt2AfP/WlkRjWAJ+ruPzCxh+gQfOZItLgDc
-# xdO0MO36WpD0F1+vg22JULc0twrooVCPFywTNrVNDiPnZX/2/P9XyJxFPde0SYya
-# MWRqE8T2YcVgdbxVWgBdb+EoUvkmDiuCCfDpCWNWfW9AHrVpe75ZbLgz8d+xSW3h
-# BYu5Lcwy89bMB07hyePovTIPeXnbuECv4aKFWM2w4ws48S4J2Fvd4hhLLSJzaLqa
-# wozJbH8aDVCS7ew+nnexwj+nqMVBHvzIocCl7jFqlqrQH/ZqtSysTT0ZY+6b+DOg
-# o5gWfR7mthRgtnvd4SH/JNDvwBsua/9JY2FjH4Wg80JcNnomfmdej9rZU+RWuLZW
-# IwrDOufTG7zwuyGbR2Xa8VKu/3QAEnCTYoUomiPUoIEaWcYJoqpVT5AUnOyXVKGC
+# AQkEMRYEFNp46vnIIpKMTpVCWkRfpcRmhVNbMA0GCSqGSIb3DQEBAQUABIIBgIYn
+# 54Vwul57kZyqkF/NNW+oTFHotwcGTj/ThRi5c0dsSnjAB84wLwD8wNpyVxz+RniC
+# eZe8GS9dBJuf/a50oTeikk4/KGmHU6UpCM7NFHrwyzsKFBBV0BpBFyNOQ922amDH
+# 6v9uTi1SRM6gQHjV2LXNgUgZJb4N7c1oLi2Fx/DGib5QSnbio8J8eC4jCAUPx2cG
+# ZO9rbdf4qxZVJNbaM9tXCTzxRk/Pzgc4FtQjRDdeV7wr7eSU9ho66pGQAog19kVW
+# ghLQb/9XzaPVSj4suYviePMZ0A0W68MwEDsQHwlUzn60s8I06UEUvwRcrArwNGBT
+# 4I3zzsBg+epp4uG7iJERIsbOQl0qB4tdaeJ4wKdEuGEQmrrIoLY9xp5TJ7LNpml3
+# vG28ZroCY3fryaEMTeVKlLTyuHp/WS9w5nxrmRaO2AGIsqeqZbvIl1yn5LLtIhvK
+# BPeG9gm3sKmOkYXN/MdlcUEnBhYVaZlqelwaq95Udy7jCS6FKWzpLfO1gEPlsaGC
 # A0wwggNIBgkqhkiG9w0BCQYxggM5MIIDNQIBATCBkjB9MQswCQYDVQQGEwJHQjEb
 # MBkGA1UECBMSR3JlYXRlciBNYW5jaGVzdGVyMRAwDgYDVQQHEwdTYWxmb3JkMRgw
 # FgYDVQQKEw9TZWN0aWdvIExpbWl0ZWQxJTAjBgNVBAMTHFNlY3RpZ28gUlNBIFRp
 # bWUgU3RhbXBpbmcgQ0ECEQCQOX+a0ko6E/K9kV8IOKlDMA0GCWCGSAFlAwQCAgUA
 # oHkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcNMjIw
-# OTE1MjA1MDE4WjA/BgkqhkiG9w0BCQQxMgQwXXWetfMZ6PKoihuqlfK5Hk6Pam2r
-# SyliDfuEjMiHIdWbxvabmefTcMSGas3Z5iA7MA0GCSqGSIb3DQEBAQUABIICAIWK
-# qZqWVniFrtQc0uo1jlPVkQ9AjmlRh9pPwBWz5Ya/3+5UeUT7mfAWoEtZjzW1Gn03
-# SMmBIj6m/K7+NBAqORaNXjDYv9z49EeOHJgtqjlGd5xHU3F8Fx6u0tN2iiZBKiOZ
-# 1PtUww+cQ2Bg/EianN/RRwFbUYmgPwfVEUHpAZDQk88bPraIuhe7WlvN0V8cfmI1
-# A32juhd9jUmzDtrX7+t6VvY9c6cXB5V/8i2aAoGbRecW3r4qffypxqOxGRg8pCIN
-# PyusNIMc94VLJ4t/ZbN352xGjv6en/9TlzaDgE2BmlQAsvpjFXCNw2A5ADj7TF7g
-# 5JhXBgBytGMCfI0anO5bpgm+RGI302wGCMK6cZSwpflJ/Af0ltcKgNWsWlEf7QF4
-# eULZACWxX1hyz71IpycaHm9TsLJmwZkNwrkO2juA+S0DBACrDARZsdf+KBYX88+Y
-# foUYtZyZoDf+F1wwz+aMV2RpdZU0AKSrdLOt1A+T4t9RMl5wFU+6ekxWUWWrpWn5
-# HZPh0UBTmxwtB6h7fY/lNqb0D5Ch0Va9SwTSluD12qjzWImnkhJXkU73VlOdvMxm
-# M6+bKiQTaEQhUsDigWYh3CLnhHq5NXJwtwYNjxUY7nKGqm2QXZ5pf+dPL+Dl72/N
-# r1PUUWeBC2pckxeIciMgsPCTFkxaXlo4CxbPqZ/d
+# OTI2MTgxODI5WjA/BgkqhkiG9w0BCQQxMgQwJWaAJjJMCf/rdZy3BrhdaPRIlmVx
+# eKB5y2/qVRK2J067e2SrPWNTa1o8JDVLKj9XMA0GCSqGSIb3DQEBAQUABIICAFTn
+# 0WQd+BRuGhSacVhwmEJcaWx/loxWpDliVSq9ksFODBaVDH+aOQZTGsq6z04gCuUu
+# HGiU1KdFrhTKB2Cm2ytUWiEa0xqGYxqxLADrt5BlqLNSb3oAA07yOu2HDLxMhuZT
+# 46PH9uMXslmcxw2im9om3DzwL9Bx0dWyw0mIa7osLw098A2gD2iR20fUkDP+brZR
+# 2aJuMt2rUCmzebe8KhkzhDn0uhKDrw2ec73qmRGJyVGpaYCXxlUvfSjm8ODFSvJi
+# o0hkJxhFGU+BIul2d/vFMWGkj8I87uwlyY3stSu3QuxtY3+nicOL4ovLPUHuFAAU
+# /3MNW5GmAEnAGycowi1l6mI7rCpavlozYwH87nQ651oicFncBxId4QOwtMfmKYM9
+# M3KWVicX9R1tEqob+eY82RfMbhKrG1uzk9BhsqvKyKPVnzez7xqxT3KRSEZ/lm/v
+# WZEFm1ajLVPX+EVP99hwLDgTwOvSbn7OWqTVni0ErYU46DNZzchyK/nCOWjyLeOZ
+# ACtxLpAQi4SJlcrwdxmdTlfJgQWdrTXMbEnw2+sRV9MEDatW2CfU0wnzSa2BKoKz
+# M2Es12ivt349niFOfx4u/kC7ORlhCOkgKpjZZZ5zMCstJ6qVNZ33UhS0GqturRdl
+# JjOZ5Kzqdx+sgZGC7MIKtlPOuuRP37WWJH0T/shy
 # SIG # End signature block

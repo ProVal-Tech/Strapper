@@ -29,30 +29,15 @@ git clone "https://github.com/ProVal-Tech/Strapper" (Join-Path ($env:PSModulePat
 
 ## Usage
 
-Strapper is primarily intended for use inside of another script, but it will work perfectly well on the console. Check out the [public]("./public") folder for more information about the available functions.
+Strapper is primarily intended for use inside of another script, but it will work perfectly well on the console. Check out the [public](./Strapper/public) folder for more information about the available functions.
 
 ```powershell
-<# Invoke-StrapperTest.ps1 #>
-
 # Import Strapper
 Import-Module Strapper
 
-# Writes to the log file Invoke-StrapperTest-log.txt
+# Writes to the log file
 Write-Log -Message 'It works!'
 
-# Writes to the log file Invoke-StrapperTest-log.txt and to the console.
-Write-Log -Message 'It writes to the console!' -InformationAction 'Continue'
-```
-
-```powershell
-<# Console run #>
-
-# Import Strapper
-Import-Module Strapper
-
-# Writes to the log file yyyyMMdd-log.txt
-Write-Log -Message 'It works!'
-
-# Writes to the log file yyyyMMdd-log.txt and to the console.
+# Writes to the log file and to the console.
 Write-Log -Message 'It writes to the console!' -InformationAction 'Continue'
 ```

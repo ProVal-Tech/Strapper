@@ -1,52 +1,49 @@
-function Publish-GitHubModule {
+function Get-RegistryHivePath {
     <#
     .SYNOPSIS
-        Publish a PowerShell module to a GitHub repository.
-    .PARAMETER Path
-        The path to the psd1 file for the module to publish.
-    .PARAMETER Token
-        The Github personal access token to use for publishing.
-    .PARAMETER RepoUri
-        The URI to the GitHub repo to publish to.
-    .PARAMETER TempNugetPath
-        The path to use to make a temporary NuGet repo.
+        Gets a list of registry hives from the local computer.
+    .NOTES
+        Bootstrap use only.
     .EXAMPLE
-        Publish-GitHubModule `
-            -Path 'C:\users\user\Modules\MyModule\MyModule.psd1' `
-            -Token 'ghp_abcdefg1234567' `
-            -RepoUri 'https://github.com/user/MyModule'
+        Get-RegistryHivePath
+        Returns the full list of registry hives.
+    .PARAMETER ExcludeDefault
+        Exclude the Default template hive from the return.
     #>
     [CmdletBinding()]
+    [OutputType([PSCustomObject])]
     param (
-        [Parameter(Mandatory)][string]$Path,
-        [Parameter(Mandatory)][string]$Token,
-        [Parameter(Mandatory)][string]$RepoUri,
-        [Parameter()][string]$TempNugetPath = "$env:SystemDrive\temp\nuget\publish"
+        [Parameter(Mandatory = $false)][switch]$ExcludeDefault
     )
-    if (!(Get-Module -ListAvailable -Name PowerShellGet | Where-Object { $_.Version.Major -ge 3 })) {
-        Install-Module -Name PowerShellGet -AllowPrerelease -Force
+    if($StrapperSession.Platform -ne 'Win32NT') {
+        Write-Error 'This function is only supported on Windows-based platforms.' -ErrorAction Stop
     }
-    $targetModule = Get-Module $Path -ListAvailable
-    if(!$targetModule) {
-        Write-Error -Message "Failed to locate a module with the path '$targetModule'. Please pass a path to a .psd1 and try again."
-        return
+    # Regex pattern for SIDs
+    $patternSID = '((S-1-5-21)|(S-1-12-1))-\d+-\d+\-\d+\-\d+$'
+
+    # Get Username, SID, and location of ntuser.dat for all users
+    $profileList = @(
+        Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\*' | Where-Object { $_.PSChildName -match $PatternSID } |
+            Select-Object @{name = 'SID'; expression = { $_.PSChildName } },
+            @{name = 'UserHive'; expression = { "$($_.ProfileImagePath)\ntuser.dat" } },
+            @{name = 'Username'; expression = { $_.ProfileImagePath -replace '^(.*[\\\/])', '' } }
+    )
+
+    # If the default user was not excluded, add it to the list of profiles to process.
+    if (!$ExcludeDefault) {
+        $profileList += [PSCustomObject]@{
+            SID = 'DefaultUserTemplate'
+            UserHive = "$env:SystemDrive\Users\Default\ntuser.dat"
+            Username = 'DefaultUserTemplate'
+        }
     }
-    if(!(Test-Path -Path $TempNugetPath)) {
-        New-Item -Path $TempNugetPath -ItemType Directory
-    }
-    Register-PSResourceRepository -Name TempNuget -Uri $TempNugetPath
-    Publish-PSResource -Path $targetModule.ModuleBase -Repository TempNuget
-    if(!((dotnet tool list --global) | Select-String "^gpr.*gpr.*$")) {
-        dotnet tool install --global gpr
-    }
-    gpr push -k $Token "$TempNugetPath\$($targetModule.Name).$($targetModule.Version).nupkg" -r $RepoUri
-    Unregister-PSResourceRepository -Name TempNuget
+    return $profileList
 }
 # SIG # Begin signature block
 # MIInSgYJKoZIhvcNAQcCoIInOzCCJzcCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUNc7l33ScWwnn+8AgvIc7QHKv
-# wIKggiC2MIIF2DCCBMCgAwIBAgIRAOQnBJX2jJHW0Ox7SU6k3xwwDQYJKoZIhvcN
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUkJ1Ue7iGraCjo0JhhhJcsL9u
+# PFmggiC2MIIF2DCCBMCgAwIBAgIRAOQnBJX2jJHW0Ox7SU6k3xwwDQYJKoZIhvcN
 # AQELBQAwfjELMAkGA1UEBhMCUEwxIjAgBgNVBAoTGVVuaXpldG8gVGVjaG5vbG9n
 # aWVzIFMuQS4xJzAlBgNVBAsTHkNlcnR1bSBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0
 # eTEiMCAGA1UEAxMZQ2VydHVtIFRydXN0ZWQgTmV0d29yayBDQTAeFw0xODA5MTEw
@@ -226,31 +223,31 @@ function Publish-GitHubModule {
 # dGVybWVkaWF0ZSBDQSBSU0EgUjECEHlcJMbs+LJ7AQD1+/722sgwCQYFKw4DAhoF
 # AKB4MBgGCisGAQQBgjcCAQwxCjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisG
 # AQQBgjcCAQQwHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcN
-# AQkEMRYEFBQMbx2Pr68FJHqBLV9oP9+JFM8QMA0GCSqGSIb3DQEBAQUABIIBgI5c
-# a/PC+I5FofSbHRb4wOJuu573NyrEyOxrzrP6k4rB4YMqgmgUr8OLCqcgf7LeQ2vJ
-# X7/1pktYS5mzt1SkW91l28KYF9fspW+d2Oj5P3x/DH7S+M7OF/1a2Cq9w8MunOVe
-# XHFxn7w7zg0V7xa4WKpgWgCt8BEU+tEasZwjdSbwujkPToSjNFzBI+W9Z/WHCJEl
-# iffP5W4rVav1rSg4VdXn3VC6wZI3pFZdHrYpXW5pmVbVO99isbe/QbEhp5ygO1vW
-# VKBzHSqwvmVRkJR2wad9XdHWfdr5gVB8NO9YQVY7fsRHre5kKObIz0Hng1DDK7ng
-# Q22rZMHH7KehWEKaUtIwPBH+MjS28+xjhrUhCkNSP3XMwxzKKsxbPgIwDFPNV7zQ
-# 6wk1EG7hYZ24Y7aSodkwF+kT3m0+QQBr6xS0tvR0aYtMfobBFwBpauGRMYtvEMJT
-# iI75JjhDEVg/qPjZ9QOwgEXuAxpJHC43dSvBewdIL8Swl39zC/J/7IchVEDtK6GC
+# AQkEMRYEFPKRjnRWa3d0y324simHa7SsCH3lMA0GCSqGSIb3DQEBAQUABIIBgCGv
+# by1Wrtfe/TSEr0kpZYJqAmW6Br/QoXran9Zoggud4bT14z9f+TjxbAAUhyc1eeR+
+# uXbbRS39vPaAj4g1+mJqK9hSGJQeRHnTeMVQ/apsuqDlYf29tJYt15qyQSedRUhh
+# MNHqAmYA/C+Tc9qg5mVUleonEj4oQp2cPuAtRysfGhQGzamh65tzVItm7cA3jVXG
+# VEx4CUaAdUJNphs9sdCl3NDKCYD8CoQw37aqbON2N5AML0jtpIUa2VH+ERe+R1f3
+# 0qUjoSLJ1icpW7j/V41XHLOHSj/Mz6dbiLktyYjbWBPkGglHQJfd/DWUqqmIDsX2
+# OD9cxo28sM+t3iPy+e58EkFnJW7p0TpzrlZ8oQSkqy7yQ75rwaA166ilbH/XapC3
+# vGCnwmKsXcoJuYAwWz3O2vdwbY7tQi8XeZviW4G5G/MILAa/5cxxzi+kEcj/TB91
+# JjNn6WFhMsB/eT9QqmvKmamPNEjounvGPL3HZ2cSZoF4XSRz7VcqDb5R1HxRF6GC
 # A0wwggNIBgkqhkiG9w0BCQYxggM5MIIDNQIBATCBkjB9MQswCQYDVQQGEwJHQjEb
 # MBkGA1UECBMSR3JlYXRlciBNYW5jaGVzdGVyMRAwDgYDVQQHEwdTYWxmb3JkMRgw
 # FgYDVQQKEw9TZWN0aWdvIExpbWl0ZWQxJTAjBgNVBAMTHFNlY3RpZ28gUlNBIFRp
 # bWUgU3RhbXBpbmcgQ0ECEQCQOX+a0ko6E/K9kV8IOKlDMA0GCWCGSAFlAwQCAgUA
 # oHkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcNMjIw
-# OTI2MTgxODMyWjA/BgkqhkiG9w0BCQQxMgQwPHnzZqgt3j3lQIo74GpQFDQoPxoF
-# EI3Qv7JSRPEEaskrXmskKPornN0fWEAFO/jiMA0GCSqGSIb3DQEBAQUABIICAHFE
-# CwedwbTVd0r8iYLooTKiv0p8+ToIqqp5qwBex+4cNvWBTdJIQmlWjDtB60gESc4p
-# ZVYUraXPO+fEvYfJ9nm7XDN8Jn6XX6fSvSYKEGkchdf+pSpDtg9q3a/1d6y6f8yp
-# K83hpfALRvTbfx18Zee9AAOZXsrpcf9Sc8DlVrZC5GAUPjhchygwRS4ZXaxTpaQ1
-# T/28oAJ4S1ET00cZ8YbIRZuy0SNDR6Spncw2v19Kqug1R3UJsYByuCBvGNKwZwiD
-# T8zKzhHlX3p2eIa54l04YeAhTuze8MUG2gpwl+c/NwZCnHi1GcBSEdb6IJZoBZ+b
-# 2/jZxzYxKhuUkbIl2JgaEZjlzuiVs0UCuU14w+j63tHk3u/Gu0MeBB6UtYDUPZxv
-# fs5FWOWbJHoPzkXIKo8wWuggUS7oIy/SwbOsWqOV4Erof6iQIjDtzuuCJsW5WvS/
-# D/tyq0F3BgcxBiKjvCey7ncLkAvr6S3o6mC8OvFdl/SqMOoH+JIq05e8Zuxzs2JG
-# qOrLZcDi8VtZQMHvySGfy68HKlXrukIBY0ZZ2dCrfmjHaIvuI24d/BvbHAqV5A+0
-# j8RK21nUk2mX6hQi7Gts12lLpG5mupSuAX/08Liy0BGuiYlZl1mu+5ZvsTQSKKYX
-# RTiPuNYv3X9Y7JkPoqqo4pvDGBZ78wPyBiVwiN23
+# OTI2MTgxODA5WjA/BgkqhkiG9w0BCQQxMgQw8VjdqG5hfx0B2KxWFkySSydGHNrg
+# nkcqjrT3saB7/esPEisLWmRdWgAfPU8U8wEMMA0GCSqGSIb3DQEBAQUABIICAHe9
+# FzHyEWkWiJRuMGS3WhvSw4ejU0YJDgx6LtKnCOcpNpHLLTY+6AajSCRrxl5Bxxfv
+# EnF3H+wQFzubMhhWt3KX0F3zWuTgZv9Mzg487cqQfIG0BBcaSdP0e1N47UH7Iv8R
+# FKocR8WaIh811atPf4l6/geNj4huzN9lbTHB1X6OJ20EZLdaqgtXgoeZh5nNbM6Q
+# CPKZotZqBLWfiHFtz1DaP9s6j0iQYSBpQ8SYcdRz5dMprOhkROc0i4LdspDGAp+y
+# O99v3vGSl0NmiLeDjzrIwniE9/UTm4vwvul5LYaDYvER5hscusqYq0drDvcP3eJU
+# 2b8/jfHNT5852PIQHsBenAYRnkMdpBVNCj8AediqtNwjXy3MRvmoDskVqpyfLehh
+# QmBKGv4o2GOSku8H5wchYNAHt6he7fH6PluBkjqXw6wm3iHnO7NAxMdb2JtqTtgx
+# lN/Jr7WDNuZkc3AGi9Er2ouxDONxRU+kf9PiUctvjAHVzlFFz21CofkNdTcyFeJw
+# wCPredQ9GhPv+LzhL2U0/+YlddRp26hZjI+cNF8XBn3UskmLTTcYKytW9uGxMdrZ
+# ncaOfhDEiQF8gsUUaCBPo1CJKuy1td7uBGxIqvZFt6LpGcuDHtWuK+pr3OShSpTC
+# Du2DchebTGNOzkwRr0JOQIUBtKsPbzaAZkUEJNIu
 # SIG # End signature block
