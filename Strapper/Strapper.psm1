@@ -1,3 +1,4 @@
+#region StrapperSession
 $StrapperSession = [pscustomobject]@{
     LogPath = $null
     DataPath = $null
@@ -12,15 +13,15 @@ $StrapperSession = [pscustomobject]@{
 if ($MyInvocation.PSCommandPath) {
     $scriptObject = Get-Item -Path $MyInvocation.PSCommandPath
     $StrapperSession.WorkingPath = $($scriptObject.DirectoryName)
-    $StrapperSession.LogPath     = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-log.txt"
-    $StrapperSession.DataPath    = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-data.txt"
-    $StrapperSession.ErrorPath   = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-error.txt"
+    $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-log.txt"
+    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-data.txt"
+    $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-error.txt"
     $StrapperSession.ScriptTitle = $scriptObject.BaseName
 } else {
     $StrapperSession.WorkingPath = (Get-Location).Path
-    $StrapperSession.LogPath     = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-log.txt"
-    $StrapperSession.DataPath    = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-data.txt"
-    $StrapperSession.ErrorPath   = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-error.txt"
+    $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-log.txt"
+    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-data.txt"
+    $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-error.txt"
     $StrapperSession.ScriptTitle = '***Manual Run***'
 }
 
@@ -29,227 +30,965 @@ if ($StrapperSession.Platform -eq 'Win32NT') {
 } else {
     $StrapperSession.IsElevated = $(id -u) -eq 0
 }
-Remove-Item -Path $StrapperSession.DataPath -Force -ErrorAction SilentlyContinue
-Remove-Item -Path $StrapperSession.ErrorPath -Force -ErrorAction SilentlyContinue
-Write-Log -Text '-----------------------------------------------' -Type INIT
-Write-Log -Text $StrapperSession.ScriptTitle -Type INIT
-Write-Log -Text "System: $([Environment]::MachineName)" -Type INIT
-Write-Log -Text "User: $([Environment]::UserName)" -Type INIT
-Write-Log -Text "OS Bitness: $((32,64)[[Environment]::Is64BitOperatingSystem])" -Type INIT
-Write-Log -Text "PowerShell Bitness: $(if([Environment]::Is64BitProcess) {64} else {32})" -Type INIT
-Write-Log -Text "PowerShell Version: $(Get-Host | Select-Object -ExpandProperty Version | Select-Object -ExpandProperty Major)" -Type INIT
-Write-Log -Text '-----------------------------------------------' -Type INIT
+#endregion
+
+#region Private Functions
+function Get-RegistryHivePath {
+    <#
+    .SYNOPSIS
+        Gets a list of registry hives from the local computer.
+    .NOTES
+        Bootstrap use only.
+    .EXAMPLE
+        Get-RegistryHivePath
+        Returns the full list of registry hives.
+    .PARAMETER ExcludeDefault
+        Exclude the Default template hive from the return.
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param (
+        [Parameter(Mandatory = $false)][switch]$ExcludeDefault
+    )
+    if($StrapperSession.Platform -ne 'Win32NT') {
+        Write-Error 'This function is only supported on Windows-based platforms.' -ErrorAction Stop
+    }
+    # Regex pattern for SIDs
+    $patternSID = '((S-1-5-21)|(S-1-12-1))-\d+-\d+\-\d+\-\d+$'
+
+    # Get Username, SID, and location of ntuser.dat for all users
+    $profileList = @(
+        Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\*' | Where-Object { $_.PSChildName -match $PatternSID } |
+            Select-Object @{name = 'SID'; expression = { $_.PSChildName } },
+            @{name = 'UserHive'; expression = { "$($_.ProfileImagePath)\ntuser.dat" } },
+            @{name = 'Username'; expression = { $_.ProfileImagePath -replace '^(.*[\\\/])', '' } }
+    )
+
+    # If the default user was not excluded, add it to the list of profiles to process.
+    if (!$ExcludeDefault) {
+        $profileList += [PSCustomObject]@{
+            SID = 'DefaultUserTemplate'
+            UserHive = "$env:SystemDrive\Users\Default\ntuser.dat"
+            Username = 'DefaultUserTemplate'
+        }
+    }
+    return $profileList
+}
+
+function Write-InformationExtended {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)][Object]$MessageData,
+        [System.ConsoleColor]$ForegroundColor = $Host.UI.RawUI.ForegroundColor,
+        [System.ConsoleColor]$BackgroundColor = $Host.UI.RawUI.BackgroundColor,
+        [switch]$NoNewLine
+    )
+
+    $message = [System.Management.Automation.HostInformationMessage]@{
+        Message = $MessageData
+        ForegroundColor = $ForegroundColor
+        BackgroundColor = $BackgroundColor
+        NoNewLine = $NoNewLine.IsPresent
+    }
+
+    Write-Information -MessageData $message
+}
+
+function Write-LogHelper {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true, ParameterSetName = 'String')]
+        [AllowEmptyString()]
+        [string]$Text,
+        [Parameter(Mandatory = $true, ParameterSetName = 'String')]
+        [string]$Type
+    )
+    $formattedLog = "$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))  $($Type.PadRight(8)) $Text"
+    switch ($Type) {
+        'LOG' {
+            Write-InformationExtended -MessageData $formattedLog
+            Add-Content -Path $StrapperSession.logPath -Value $formattedLog
+        }
+        'INIT' {
+            Write-InformationExtended -MessageData $formattedLog -ForegroundColor White -BackgroundColor DarkBlue
+            Add-Content -Path $StrapperSession.logPath -Value $formattedLog
+        }
+        'WARN' {
+            Write-InformationExtended -MessageData $formattedLog -ForegroundColor Black -BackgroundColor DarkYellow
+            Add-Content -Path $StrapperSession.logPath -Value $formattedLog
+        }
+        'ERROR' {
+            Write-InformationExtended -MessageData $formattedLog -ForegroundColor White -BackgroundColor DarkRed
+            Add-Content -Path $StrapperSession.logPath -Value $formattedLog
+            Add-Content -Path $StrapperSession.errorPath -Value $formattedLog
+        }
+        'SUCCESS' {
+            Write-InformationExtended -MessageData $formattedLog -ForegroundColor White -BackgroundColor DarkGreen
+            Add-Content -Path $StrapperSession.logPath -Value $formattedLog
+        }
+        'DATA' {
+            Write-InformationExtended -MessageData $formattedLog -ForegroundColor White -BackgroundColor Blue
+            Add-Content -Path $StrapperSession.logPath -Value $formattedLog
+            Add-Content -Path $StrapperSession.dataPath -Value $Text
+        }
+        Default {
+            Write-InformationExtended -MessageData $formattedLog
+            Add-Content -Path $StrapperSession.logPath -Value $formattedLog
+        }
+    }
+}
+#endregion
+
+#region Public Functions
+function Set-StrapperEnviornment {
+    Remove-Item -Path $StrapperSession.DataPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path $StrapperSession.ErrorPath -Force -ErrorAction SilentlyContinue
+    Write-Log -Text '-----------------------------------------------' -Type INIT
+    Write-Log -Text $StrapperSession.ScriptTitle -Type INIT
+    Write-Log -Text "System: $([Environment]::MachineName)" -Type INIT
+    Write-Log -Text "User: $([Environment]::UserName)" -Type INIT
+    Write-Log -Text "OS Bitness: $((32,64)[[Environment]::Is64BitOperatingSystem])" -Type INIT
+    Write-Log -Text "PowerShell Bitness: $(if([Environment]::Is64BitProcess) {64} else {32})" -Type INIT
+    Write-Log -Text "PowerShell Version: $(Get-Host | Select-Object -ExpandProperty Version | Select-Object -ExpandProperty Major)" -Type INIT
+    Write-Log -Text '-----------------------------------------------' -Type INIT
+}
+
+function Copy-RegistryItem {
+    <#
+    .SYNOPSIS
+        Copies a registry property or key to the target destination.
+    .PARAMETER Path
+        The path to the key to copy.
+    .PARAMETER Destination
+        The path the the key to copy to.
+    .PARAMETER Name
+        The name of the property to copy.
+    .PARAMETER Recurse
+        Recursively copy all subkeys from the target key path.
+    .PARAMETER Force
+        Create the destination key if it does not exist.
+    .EXAMPLE
+        Copy-RegistryItem -Path HKLM:\SOFTWARE\Canon -Destination HKLM:\SOFTWARE\_automation\RegistryBackup -Force -Recurse
+        Copy all keys, subkeys, and properties from HKLM:\SOFTWARE\Canon to HKLM:\SOFTWARE\_automation\RegistryBackup
+    .EXAMPLE
+        Copy-RegistryItem -Path HKLM:\SOFTWARE\Adobe -Name PDFFormat -Destination HKLM:\SOFTWARE\_automation\RegistryBackup\Adobe -Force
+        Copy the PDFFormat property from HKLM:\SOFTWARE\Adobe to HKLM:\SOFTWARE\_automation\RegistryBackup\Adobe
+    #>
+    [CmdletBinding()]
+    [OutputType([Microsoft.Win32.RegistryKey])]
+    param (
+        [Parameter(ParameterSetName = 'Property')]
+        [Parameter(ParameterSetName = 'Key')]
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(ParameterSetName = 'Property')]
+        [Parameter(ParameterSetName = 'Key')]
+        [Parameter(Mandatory)][string]$Destination,
+        [Parameter(ParameterSetName = 'Property')]
+        [string]$Name,
+        [Parameter(ParameterSetName = 'Key')]
+        [switch]$Recurse,
+        [Parameter(ParameterSetName = 'Property')]
+        [Parameter(ParameterSetName = 'Key')]
+        [switch]$Force
+    )
+
+    if($StrapperSession.Platform -ne 'Win32NT') {
+        Write-Error 'This function is only supported on Windows-based platforms.' -ErrorAction Stop
+    }
+
+    if ((Get-Item -Path ($Path -split '\\')[0]).GetType() -ne [Microsoft.Win32.RegistryKey]) {
+        Write-Log -Text 'The supplied path does not correlate to a registry key.' -Type ERROR
+        return $null
+    } elseif ((Get-Item -Path ($Destination -split '\\')[0]).GetType() -ne [Microsoft.Win32.RegistryKey]) {
+        Write-Log -Text 'The supplied destination does not correlate to a registry key.' -Type ERROR
+        return $null
+    } elseif (!(Test-Path -Path $Path)) {
+        Write-Log -Text "Path '$Path' does not exist." -Type ERROR
+        return $null
+    } elseif (!(Test-Path -Path $Destination) -and $Force) {
+        Write-Log -Text "'$Destination' does not exist. Creating."
+        New-Item -Path $Destination -Force | Out-Null
+    } elseif (!(Test-Path -Path $Destination)) {
+        Write-Log -Text "Destination '$Destination' does not exist." -Type ERROR
+        return $null
+    }
+
+    if ($Name) {
+        if (Copy-ItemProperty -Path $Path -Destination $Destination -Name $Name -PassThru) {
+            return Get-Item -Path $Destination
+        } else {
+            Write-Log -Message "An error occurred when writing the registry property: $($error[0].Exception.Message)" -Type ERROR
+        }
+    } else {
+        return Copy-Item -Path $Path -Destination $Destination -Recurse:$Recurse -PassThru
+    }
+}
+
+function Get-StrapperWorkingPath {
+    return $StrapperSession.WorkingPath
+}
+
+function Get-UserRegistryKeyProperty {
+    <#
+    .SYNOPSIS
+        Gets a list of existing user registry properties.
+    .EXAMPLE
+        Get-UserRegistryKeyProperty -Path "SOFTWARE\_automation\Prompter" -Name "Timestamp"
+        Gets the Prompter Timestamp property from each available user's registry hive.
+    .PARAMETER Path
+        The relative registry path to the target property.
+        Ex: To retrieve the property information for each user's Level property under the path HKEY_CURRENT_USER\SOFTWARE\7-Zip\Compression: pass "SOFTWARE\7-Zip\Compression"
+    .PARAMETER Name
+        The name of the property to target.
+        Ex: To retrieve the property information for each user's Level property under the path HKEY_CURRENT_USER\SOFTWARE\7-Zip\Compression: pass "Level"
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param (
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $false)][string]$Name = '(Default)'
+    )
+
+    if($StrapperSession.Platform -ne 'Win32NT') {
+        Write-Error 'This function is only supported on Windows-based platforms.' -ErrorAction Stop
+    }
+    
+    # Regex pattern for SIDs
+    $patternSID = '((S-1-5-21)|(S-1-12-1))-\d+-\d+\-\d+\-\d+$'
+
+    # Get Username, SID, and location of ntuser.dat for all users
+    $profileList = Get-RegistryHivePath
+
+    # Get all user SIDs found in HKEY_USERS (ntuser.dat files that are loaded)
+    $loadedHives = Get-ChildItem Registry::HKEY_USERS | Where-Object { $_.PSChildname -match $PatternSID } | Select-Object @{name = 'SID'; expression = { $_.PSChildName } }
+
+    # Get all user hives that are not currently logged in
+    if ($LoadedHives) {
+        $UnloadedHives = Compare-Object $ProfileList.SID $LoadedHives.SID | Select-Object @{name = 'SID'; expression = { $_.InputObject } }, UserHive, Username
+    } else {
+        $UnloadedHives = $ProfileList
+    }
+
+    $returnEntries = @(
+        foreach ($profile in $ProfileList) {
+            # Load user ntuser.dat if it's not already loaded
+            if ($profile.SID -in $UnloadedHives.SID) {
+                reg load HKU\$($profile.SID) $($profile.UserHive) | Out-Null
+            }
+
+            # Get the absolute path to the key for the currently iterated user.
+            $propertyPath = "Registry::HKEY_USERS\$($profile.SID)\$Path"
+
+            # Get the target registry entry
+            $returnEntry = $null
+            $returnEntry = Get-ItemProperty -Path $propertyPath -Name $Name -ErrorAction SilentlyContinue | Select-Object -ExpandProperty $Name
+
+            # If the get was successful, then pass back a custom object that describes the registry entry.
+            if ($returnEntry) {
+                [PSCustomObject]@{
+                    Username = $profile.Username
+                    SID = $profile.SID
+                    Path = $propertyPath
+                    Hive = $profile.UserHive
+                    Name = $Name
+                    Value = $returnEntry
+                }
+            }
+
+            # Collect garbage and close ntuser.dat if the hive was initially unloaded
+            if ($profile.SID -in $UnloadedHives.SID) {
+                [gc]::Collect()
+                reg unload HKU\$($profile.SID) | Out-Null
+            }
+        }
+    )
+    return $returnEntries
+}
+
+function Install-Chocolatey {
+    <#
+    .SYNOPSIS
+        Installs or updates the Chocolatey package manager.
+    .EXAMPLE
+        PS C:\> Install-Chocolatey
+    #>
+    if($StrapperSession.Platform -ne 'Win32NT') {
+        Write-Error 'Chocolatey is only supported on Windows-based platforms. Use your better package manager instead. ;)' -ErrorAction Stop
+    }
+    if ($env:path -split ';' -notcontains ";$($env:ALLUSERSPROFILE)\chocolatey\bin") {
+        $env:Path = $env:Path + ";$($env:ALLUSERSPROFILE)\chocolatey\bin"
+    }
+    if (Test-Path -Path "$($env:ALLUSERSPROFILE)\chocolatey\bin") {
+        Write-Log -Text 'Chocolatey installation detected.' -Type LOG
+        choco upgrade chocolatey -y | Out-Null
+        choco feature enable -n=allowGlobalConfirmation -confirm | Out-Null
+        choco feature disable -n=showNonElevatedWarnings -confirm | Out-Null
+        return 0
+    } else {
+        [Net.ServicePointManager]::SecurityProtocol = [Enum]::ToObject([Net.SecurityProtocolType], 3072)
+        Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+        choco feature enable -n=allowGlobalConfirmation -confirm | Out-Null
+        choco feature disable -n=showNonElevatedWarnings -confirm | Out-Null
+    }
+
+    if (!(Test-Path -Path "$($env:ALLUSERSPROFILE)\chocolatey\bin")) {
+        Write-Log -Text 'Chocolatey installation failed.' -Type ERROR
+        return 1
+    }
+    return 0
+}
+
+function Install-GitHubModule {
+    <#
+    .SYNOPSIS
+        Install a PowerShell module from a GitHub repository.
+    .DESCRIPTION
+        Install a PowerShell module from a GitHub repository via PowerShellGet v3.
+
+        This script requires a separate Azure function that returns a GitHub Personal Access Token based on two Base64 encoded scripts passed to it.
+    .PARAMETER Name
+        The name of the Github module to install.
+    .PARAMETER Username
+        The username of the Github user to authenticate with.
+    .PARAMETER GithubPackageUri
+        The URI to the Github Nuget package repository.
+    .PARAMETER AzureGithubPATUri
+        The URI to the Azure function that will return the PAT.
+    .PARAMETER AzureGithubPATFunctionKey
+        The function key for the Azure function.
+    .EXAMPLE
+        Install-GitHubModule `
+            -Name MyGithubModule `
+            -Username GithubUser `
+            -GitHubPackageUri 'https://nuget.pkg.github.com/GithubUser/index.json' `
+            -AzureGithubPATUri 'https://pat-function-subdomain.azurewebsites.net/api/FunctionName' `
+            -AzureGithubPATFunctionKey 'MyFunctionKey'
+        Import-Module -Name MyGithubModule
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Username,
+        [Parameter(Mandatory)][string]$GithubPackageUri,
+        [Parameter(Mandatory)][string]$AzureGithubPATUri,
+        [Parameter(Mandatory)][string]$AzureGithubPATFunctionKey
+    )
+    Write-Debug -Message "--- Parameters ---"
+    Write-Debug -Message "Name: $Name"
+    Write-Debug -Message "GitHub Username: $Username"
+    Write-Debug -Message "GitHub Package Uri: $GithubPackageUri"
+    Write-Debug -Message "Azure Function Uri: $AzureGithubPATUri"
+    Write-Debug -Message "Azure Function Key: $AzureGithubPATFunctionKey"
+    
+    # Install PowerShellGet v3+ if not already installed.
+    Write-Debug -Message "Checking for PowerShellGet v3+"
+    if (!(Get-Module -ListAvailable -Name PowerShellGet | Where-Object { $_.Version.Major -ge 3 })) {
+        Write-Debug -Message "Installing PowerShellGet v3+"
+        Install-Module -Name PowerShellGet -AllowPrerelease -Force
+    }
+
+    # Get 'Strapper.psm1' path and encode to Base64
+    $moduleMemberPath = (Get-ChildItem (Get-Item (Get-Module -name Strapper).Path).Directory -Recurse -Filter "Strapper.psm1" -File).FullName
+    Write-Debug -Message "Encoding '$moduleMemberPath' content as Base64 string."
+    $base64EncodedModuleMember = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes((Get-Content -LiteralPath $moduleMemberPath -Raw)))
+    Write-Debug -Message "Encoded $moduleMemberPath`: $base64EncodedModuleMember"
+
+    # Encode the calling script to Base64
+    Write-Debug -Message "Encoding $($MyInvocation.PSCommandPath) as Base64 string."
+    $base64EncodedScript = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes((Get-Content -LiteralPath $($MyInvocation.PSCommandPath) -Raw)))
+    Write-Debug -Message "Encoded $($MyInvocation.PSCommandPath)`: $base64EncodedScript"
+
+    Write-Debug -Message "Registering '$GithubPackageUri' as temporary repo."
+    Register-PSResourceRepository -Name TempGithub -Uri $GithubPackageUri -Trusted
+    Write-Debug -Message "Acquiring GitHub PAT"
+    $githubPAT = (
+        Invoke-RestMethod `
+            -Uri "$($AzureGithubPATUri)?code=$($AzureGithubPATFunctionKey)" `
+            -Method Post `
+            -Body $(
+                @{
+                    Script = $base64EncodedScript
+                    ScriptExtension = [System.IO.FileInfo]::new($($MyInvocation.PSCommandPath)).Extension
+                    ModuleMember = $base64EncodedModuleMember
+                    ModuleMemberExtension = [System.IO.FileInfo]::new($moduleMemberPath).Extension
+                } | ConvertTo-Json
+            ) `
+            -ContentType 'application/json'
+    ) | ConvertTo-SecureString -AsPlainText -Force
+    Write-Debug -Message "PAT Last 4: $(([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($githubPAT)))[-4..-1])"
+    Write-Debug -Message "Installing module '$Name'."
+
+    Install-PSResource -Name $Name -Repository TempGithub -Credential (New-Object System.Management.Automation.PSCredential($Username, $githubPAT))
+    Write-Debug -Message "Unregistering '$GithubPackageUri'."
+    Unregister-PSResourceRepository -Name TempGithub
+}
+
+function Publish-GitHubModule {
+    <#
+    .SYNOPSIS
+        Publish a PowerShell module to a GitHub repository.
+    .PARAMETER Path
+        The path to the psd1 file for the module to publish.
+    .PARAMETER Token
+        The Github personal access token to use for publishing.
+    .PARAMETER RepoUri
+        The URI to the GitHub repo to publish to.
+    .PARAMETER TempNugetPath
+        The path to use to make a temporary NuGet repo.
+    .EXAMPLE
+        Publish-GitHubModule `
+            -Path 'C:\users\user\Modules\MyModule\MyModule.psd1' `
+            -Token 'ghp_abcdefg1234567' `
+            -RepoUri 'https://github.com/user/MyModule'
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Token,
+        [Parameter(Mandatory)][string]$RepoUri,
+        [Parameter()][string]$TempNugetPath = "$env:SystemDrive\temp\nuget\publish"
+    )
+    if (!(Get-Module -ListAvailable -Name PowerShellGet | Where-Object { $_.Version.Major -ge 3 })) {
+        Install-Module -Name PowerShellGet -AllowPrerelease -Force
+    }
+    $targetModule = Get-Module $Path -ListAvailable
+    if(!$targetModule) {
+        Write-Error -Message "Failed to locate a module with the path '$targetModule'. Please pass a path to a .psd1 and try again."
+        return
+    }
+    if(!(Test-Path -Path $TempNugetPath)) {
+        New-Item -Path $TempNugetPath -ItemType Directory
+    }
+    Register-PSResourceRepository -Name TempNuget -Uri $TempNugetPath
+    Publish-PSResource -Path $targetModule.ModuleBase -Repository TempNuget
+    if(!((dotnet tool list --global) | Select-String "^gpr.*gpr.*$")) {
+        dotnet tool install --global gpr
+    }
+    gpr push -k $Token "$TempNugetPath\$($targetModule.Name).$($targetModule.Version).nupkg" -r $RepoUri
+    Unregister-PSResourceRepository -Name TempNuget
+}
+
+function Remove-UserRegistryKeyProperty {
+    <#
+    .SYNOPSIS
+        Removes a registry property value for existing user registry hives.
+    .EXAMPLE
+        Remove-UserRegistryKeyProperty -Path "SOFTWARE\_automation\Prompter" -Name "Timestamp"
+        Removes registry property "Timestamp" under "SOFTWARE\_automation\Prompter" for each available user's registry hive.
+    .PARAMETER Path
+        The relative registry path to the target property.
+    .PARAMETER Name
+        The name of the property to target.
+    #>
+    [CmdletBinding()]
+    [OutputType([System.Void])]
+    param (
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    if($StrapperSession.Platform -ne 'Win32NT') {
+        Write-Error 'This function is only supported on Windows-based platforms.' -ErrorAction Stop
+    }
+
+    # Regex pattern for SIDs
+    $patternSID = '((S-1-5-21)|(S-1-12-1))-\d+-\d+\-\d+\-\d+$'
+
+    # Get Username, SID, and location of ntuser.dat for all users
+    $profileList = Get-RegistryHivePath
+
+    # Get all user SIDs found in HKEY_USERS (ntuser.dat files that are loaded)
+    $loadedHives = Get-ChildItem Registry::HKEY_USERS | Where-Object { $_.PSChildname -match $PatternSID } | Select-Object @{name = 'SID'; expression = { $_.PSChildName } }
+
+    # Get all user hives that are not currently logged in
+    if ($LoadedHives) {
+        $UnloadedHives = Compare-Object $ProfileList.SID $LoadedHives.SID | Select-Object @{name = 'SID'; expression = { $_.InputObject } }, UserHive, Username
+    } else {
+        $UnloadedHives = $ProfileList
+    }
+
+    # Iterate through each profile on the machine
+    foreach ($profile in $ProfileList) {
+        # Load User ntuser.dat if it's not already loaded
+        if ($profile.SID -in $UnloadedHives.SID) {
+            reg load HKU\$($profile.SID) $($profile.UserHive) | Out-Null
+        }
+
+        $propertyPath = "Registry::HKEY_USERS\$($profile.SID)\$Path"
+
+        # If the entry does not exist then skip this user.
+        if (!(Get-ItemProperty -Path $propertyPath -Name $Name -ErrorAction SilentlyContinue)) {
+            Write-Log -Text "The requested registry entry for user '$($profile.Username)' does not exist." -Type LOG
+            continue
+        }
+
+        # Set the parameters to pass to Remove-ItemProperty
+        $parameters = @{
+            Path = $propertyPath
+            Name = $Name
+        }
+
+        # Remove the target registry entry
+        Remove-ItemProperty @parameters
+
+        # Log the success or failure status of the removal.
+        if ($?) {
+            Write-Log -Text "Removed the requested registry entry for user '$($profile.Username)'" -Type LOG
+        } else {
+            Write-Log -Text "Failed to remove the requested registry entry for user '$($profile.Username)'" -Type ERROR
+        }
+
+        # Collect garbage and close ntuser.dat if the hive was initially unloaded
+        if ($profile.SID -in $UnloadedHives.SID) {
+            [gc]::Collect()
+            reg unload HKU\$($profile.SID) | Out-Null
+        }
+    }
+}
+
+function Set-RegistryKeyProperty {
+    <#
+    .SYNOPSIS
+        Sets a Windows registry property value.
+    .EXAMPLE
+        Set-RegistryKeyProperty -Path "HKLM:\SOFTWARE\_automation\Test\1\2\3\4" -Name "MyValueName" -Value "1" -Type DWord
+        Creates a DWord registry property with the name MyValueName and the value of 1. Will not create the key path if it does not exist.
+    .EXAMPLE
+        Set-RegistryKeyProperty -Path "HKLM:\SOFTWARE\_automation\Strings\New\Path" -Name "MyString" -Value "1234" -Force
+        Creates a String registry property based on value type inference with the name MyString and the value of "1234". Creates the descending key path if it does not exist.
+    .PARAMETER Path
+        The registry path to the key to store the target property.
+    .PARAMETER Name
+        The name of the property to create/update.
+    .PARAMETER Value
+        The value to set for the property.
+    .PARAMETER Type
+        The type of value to set. If not passed, this will be inferred from the object type of the Value parameter.
+    .PARAMETER Force
+        Will create the registry key path to the property if it does not exist.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Name = '(Default)',
+
+        [Parameter(Mandatory = $true)]
+        [object]$Value,
+
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('Unknown', 'String', 'ExpandString', 'Binary', 'DWord', 'MultiString', 'QWord', 'None')]
+        [Microsoft.Win32.RegistryValueKind]$Type,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$Force
+    )
+    
+    if($StrapperSession.Platform -ne 'Win32NT') {
+        Write-Error 'This function is only supported on Windows-based platforms.' -ErrorAction Stop
+    }
+
+    if ((Get-Item -Path ($Path -split '\\')[0]).GetType() -ne [Microsoft.Win32.RegistryKey]) {
+        Write-Log -Text 'The supplied path does not correlate to a registry key.' -Type ERROR
+        return $null
+    }
+
+    if (!(Test-Path -Path $Path) -and $Force) {
+        Write-Log -Text "'$Path' does not exist. Creating."
+        New-Item -Path $Path -Force | Out-Null
+    } elseif (!(Test-Path -Path $Path)) {
+        Write-Log -Text "'$Path' does not exist. Unable to create registry entry." -Type ERROR
+        return $null
+    }
+
+    $parameters = @{
+        Path = $Path
+        Name = $Name
+        Value = $Value
+        PassThru = $true
+    }
+    if ($Type) { $parameters.Add('Type', $Type) }
+    return Set-ItemProperty @parameters
+}
+
+function Set-UserRegistryKeyProperty {
+    <#
+    .SYNOPSIS
+        Creates or updates a registry property value for existing user registry hives.
+    .EXAMPLE
+        Set-UserRegistryKeyProperty -Path "SOFTWARE\_automation\Prompter" -Name "Timestamp" -Value 1
+        Creates or updates a Dword registry property property for each available user's registry hive to a value of 1.
+    .EXAMPLE
+        Set-UserRegistryKeyProperty -Path "SOFTWARE\_automation\Strings\New\Path" -Name "MyString" -Value "1234" -Force
+        Creates or updates a String registry property based on value type inference with the name MyString and the value of "1234". Creates the descending key path if it does not exist.
+    .PARAMETER Path
+        The relative registry path to the target property.
+    .PARAMETER Name
+        The name of the property to target.
+    .PARAMETER Value
+        The value to set on the target property.
+    .PARAMETER Type
+        The type of value to set. If not passed, this will be inferred from the object type of the Value parameter.
+    .PARAMETER ExcludeDefault
+        Exclude the Default user template from having the registry keys set.
+    .PARAMETER Force
+        Will create the registry key path to the property if it does not exist.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Name = '(Default)',
+
+        [Parameter(Mandatory = $true)]
+        [object]$Value,
+
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('Unknown', 'String', 'ExpandString', 'Binary', 'DWord', 'MultiString', 'QWord', 'None')]
+        [Microsoft.Win32.RegistryValueKind]$Type,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$ExcludeDefault,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$Force
+    )
+
+    if($StrapperSession.Platform -ne 'Win32NT') {
+        Write-Error 'This function is only supported on Windows-based platforms.' -ErrorAction Stop
+    }
+    
+    # Regex pattern for SIDs
+    $patternSID = '((S-1-5-21)|(S-1-12-1))-\d+-\d+\-\d+\-\d+$'
+
+    # Get Username, SID, and location of ntuser.dat for all users
+    $profileList = Get-RegistryHivePath -ExcludeDefault:$ExcludeDefault
+
+    # Get all user SIDs found in HKEY_USERS (ntuser.dat files that are loaded)
+    $loadedHives = Get-ChildItem Registry::HKEY_USERS | Where-Object { $_.PSChildname -match $PatternSID } | Select-Object @{name = 'SID'; expression = { $_.PSChildName } }
+
+    # Get all user hives that are not currently logged in
+    if ($LoadedHives) {
+        $UnloadedHives = Compare-Object $ProfileList.SID $LoadedHives.SID | Select-Object @{name = 'SID'; expression = { $_.InputObject } }, UserHive, Username
+    } else {
+        $UnloadedHives = $ProfileList
+    }
+
+    # Iterate through each profile on the machine
+    $returnEntries = @(
+        foreach ($profile in $ProfileList) {
+            # Load User ntuser.dat if it's not already loaded
+            if ($profile.SID -in $UnloadedHives.SID) {
+                reg load HKU\$($profile.SID) $($profile.UserHive) | Out-Null
+            }
+
+            $propertyPath = "Registry::HKEY_USERS\$($profile.SID)\$Path"
+
+            # Set the parameters to pass to Set-RegistryKeyProperty
+            $parameters = @{
+                Path = $propertyPath
+                Name = $Name
+                Value = $Value
+                Force = $Force
+            }
+            if ($Type) { $parameters.Add('Type', $Type) }
+
+            # Set the target registry entry
+            $returnEntry = Set-RegistryKeyProperty @parameters | Select-Object -ExpandProperty $Name
+
+            # If the set was successful, then pass back the return entry from Set-RegistryKeyProperty
+            if ($returnEntry) {
+                [PSCustomObject]@{
+                    Username = $profile.Username
+                    SID = $profile.SID
+                    Path = $propertyPath
+                    Hive = $profile.UserHive
+                    Name = $Name
+                    Value = $returnEntry
+                }
+            } else {
+                Write-Log -Text "Failed to set the requested registry entry for user '$($profile.Username)'" -Type WARN
+            }
+
+            # Collect garbage and close ntuser.dat if the hive was initially unloaded
+            if ($profile.SID -in $UnloadedHives.SID) {
+                [gc]::Collect()
+                reg unload HKU\$($profile.SID) | Out-Null
+            }
+        }
+    )
+    Write-Log -Text "$($returnEntries.Count) user registry entries successfully updated."
+    return $returnEntries
+}
+
+function Write-Log {
+    <#
+    .SYNOPSIS
+        Writes a message to a log file, the console, or both.
+    .EXAMPLE
+        PS C:\> Write-Log -Text "An error occurred." -Type ERROR
+        This will write an error to the console, the log file, and the error log file.
+    .PARAMETER Text
+        The message to pass to the log.
+    .PARAMETER StringArray
+        An array of strings to write to the log.
+    .PARAMETER Type
+        The type of log message to pass in. The options are:
+        LOG     - Outputs to the log file and console.
+        WARN    - Outputs to the log file and console.
+        ERROR   - Outputs to the log file, error file, and console.
+        SUCCESS - Outputs to the log file and console.
+        DATA    - Outputs to the log file, data file, and console.
+        INIT    - Outputs to the log file and console.
+        Default (Any other string) - Outputs to the log file and console.
+    .NOTES
+        If this function is run on the console then it will output a log file to the current directory in the format YYYYMMDD-log/data/error.txt
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true, Position = 0, ParameterSetName = 'String')]
+        [AllowEmptyString()][Alias('Message')]
+        [string]$Text,
+        [Parameter(Mandatory = $true, Position = 0, ParameterSetName = 'StringArray')]
+        [AllowEmptyString()]
+        [string[]]$StringArray,
+        [Parameter(Mandatory = $false, Position = 1, ParameterSetName = 'String')]
+        [Parameter(Mandatory = $false, Position = 1, ParameterSetName = 'StringArray')]
+        [string]$Type = 'LOG'
+    )
+    if (!($StrapperSession.logPath -and $StrapperSession.dataPath -and $StrapperSession.errorPath)) {
+        $location = (Get-Location).Path
+        $StrapperSession.logPath = Join-Path $location "$((Get-Date).ToString('yyyyMMdd'))-log.txt"
+        $StrapperSession.dataPath = Join-Path $location "$((Get-Date).ToString('yyyyMMdd'))-data.txt"
+        $StrapperSession.errorPath = Join-Path $location "$((Get-Date).ToString('yyyyMMdd'))-error.txt"
+    }
+    #Optimize-Content -Path $script:logPath
+    if ($StringArray) {
+        foreach ($logItem in $StringArray) {
+            Write-LogHelper -Text $logItem -Type $Type
+        }
+    } elseif ($Text) {
+        Write-LogHelper -Text $Text -Type $Type
+    }
+}
+#endregion
 
 Export-ModuleMember -Variable StrapperSession
+
 # SIG # Begin signature block
-# MIInSgYJKoZIhvcNAQcCoIInOzCCJzcCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
-# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUC9JKn0PmSVxuPit7LPaz0khV
-# cOeggiC2MIIF2DCCBMCgAwIBAgIRAOQnBJX2jJHW0Ox7SU6k3xwwDQYJKoZIhvcN
-# AQELBQAwfjELMAkGA1UEBhMCUEwxIjAgBgNVBAoTGVVuaXpldG8gVGVjaG5vbG9n
-# aWVzIFMuQS4xJzAlBgNVBAsTHkNlcnR1bSBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0
-# eTEiMCAGA1UEAxMZQ2VydHVtIFRydXN0ZWQgTmV0d29yayBDQTAeFw0xODA5MTEw
-# OTI2NDdaFw0yMzA5MTEwOTI2NDdaMHwxCzAJBgNVBAYTAlVTMQ4wDAYDVQQIDAVU
-# ZXhhczEQMA4GA1UEBwwHSG91c3RvbjEYMBYGA1UECgwPU1NMIENvcnBvcmF0aW9u
-# MTEwLwYDVQQDDChTU0wuY29tIFJvb3QgQ2VydGlmaWNhdGlvbiBBdXRob3JpdHkg
-# UlNBMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA+Q/doyt9y9Aq/uxn
-# habnLhu6d+Hj9a+k7PpKXZHEV0drGHdrdvL9k+Q9D8IWngtmw1aUnheDhc5W7/IW
-# /QBi9SIJVOhlF05BueBPRpeqG8i4bmJeabFf2yoCfvxsyvNB2O3Q6Pw/YUjtsAMU
-# HRAOSxngu07shmX/NvNeZwILnYZVYf16OO3+4hkAt2+hUGJ1dDyg+sglkrRueiLH
-# +B6h47LdkTGrKx0E/6VKBDfphaQzK/3i1lU0fBmkSmjHsqjTt8qhk4jrwZe8jPkd
-# 2SKEJHTHBD1qqSmTzOu4W+H+XyWqNFjIwSNUnRuYEcM4nH49hmylD0CGfAL0XAJP
-# KMuucZ8POsgz/hElNer8usVgPdl8GNWyqdN1eANyIso6wx/vLOUuqfqeLLZRRv2v
-# A9bqYGjqhRY2a4XpHsCz3cQk3IAqgUFtlD7I4MmBQQCeXr9/xQiYohgsQkCz+W84
-# J0tOgPQ9gUfgiHzqHM61dVxRLhwrfxpyKOcAtdF0xtfkn60Hk7ZTNTX8N+TD9l0W
-# viFz3pIK+KBjaryWkmo++LxlVZve9Q2JJgT8JRqmJWnLwm3KfOJZX5es6+8uyLzX
-# G1k8K8zyGciTaydjGc/86Sb4ynGbf5P+NGeETpnr/LN4CTNwumamdu0bc+sapQ3E
-# IhMglFYKTixsTrH9z5wJuqIz7YcCAwEAAaOCAVEwggFNMBIGA1UdEwEB/wQIMAYB
-# Af8CAQIwHQYDVR0OBBYEFN0ECQei9Xp9UlMSkpXuOIAlDaZZMB8GA1UdIwQYMBaA
-# FAh2zcsH/yT2xc3tu5C84oQ3RnX3MA4GA1UdDwEB/wQEAwIBBjA2BgNVHR8ELzAt
-# MCugKaAnhiVodHRwOi8vc3NsY29tLmNybC5jZXJ0dW0ucGwvY3RuY2EuY3JsMHMG
-# CCsGAQUFBwEBBGcwZTApBggrBgEFBQcwAYYdaHR0cDovL3NzbGNvbS5vY3NwLWNl
-# cnR1bS5jb20wOAYIKwYBBQUHMAKGLGh0dHA6Ly9zc2xjb20ucmVwb3NpdG9yeS5j
-# ZXJ0dW0ucGwvY3RuY2EuY2VyMDoGA1UdIAQzMDEwLwYEVR0gADAnMCUGCCsGAQUF
-# BwIBFhlodHRwczovL3d3dy5jZXJ0dW0ucGwvQ1BTMA0GCSqGSIb3DQEBCwUAA4IB
-# AQAflZojVO6FwvPUb7npBI9Gfyz3MsCnQ6wHAO3gqUUt/Rfh7QBAyK+YrPXAGa0b
-# oJcwQGzsW/ujk06MiWIbfPA6X6dCz1jKdWWcIky/dnuYk5wVgzOxDtxROId8lZwS
-# aZQeAHh0ftzABne6cC2HLNdoneO6ha1J849ktBUGg5LGl6RAk4ut8WeUtLlaZ1Q8
-# qBvZBc/kpPmIEgAGiCWF1F7u85NX1oH4LK739VFIq7ZiOnnb7C7yPxRWOsjZy6Si
-# TyWo0ZurLTAgUAcab/HxlB05g2PoH/1J0OgdRrJGgia9nJ3homhBSFFuevw1lvRU
-# 0rwrROVH13eCpUqrX5czqyQRMIIGcjCCBFqgAwIBAgIIZDNR08c4nwgwDQYJKoZI
-# hvcNAQELBQAwfDELMAkGA1UEBhMCVVMxDjAMBgNVBAgMBVRleGFzMRAwDgYDVQQH
-# DAdIb3VzdG9uMRgwFgYDVQQKDA9TU0wgQ29ycG9yYXRpb24xMTAvBgNVBAMMKFNT
-# TC5jb20gUm9vdCBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0eSBSU0EwHhcNMTYwNjI0
-# MjA0NDMwWhcNMzEwNjI0MjA0NDMwWjB4MQswCQYDVQQGEwJVUzEOMAwGA1UECAwF
-# VGV4YXMxEDAOBgNVBAcMB0hvdXN0b24xETAPBgNVBAoMCFNTTCBDb3JwMTQwMgYD
-# VQQDDCtTU0wuY29tIENvZGUgU2lnbmluZyBJbnRlcm1lZGlhdGUgQ0EgUlNBIFIx
-# MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAn4MTc6qwxm0hy9uLeod0
-# 0HHcjpdymuS7iDS03YADxi9FpHSavx4PUOqebXjzn/pRJqk9ndGylFc++zmJG5Er
-# Vu9ny+YL4w45jMY19Iw93SXpAawXQn1YFkDc+dUoRB2VZDBhOmTyl9dzTH17IwJt
-# 83XrVT1vqi3Er750rF3+arb86lx56Q9DnLVSBQ/vPrGxj9BJrabjQhlUP/MvDqHL
-# fP4T+SM52iUcuD4ASjpvMjA3ZB7HrnUH2FXSGMkOiryjXPB8CqeFgcIOr4+ZXNNg
-# JbyDWmkcJRPNcvXrnICb3CxnxN3JCZjVc+vEIaPlMo4+L1KYxmA3ZIyyb0pUchjM
-# J4f6zXWiYyFMtT1k/Summ1WvJkxgtLlc/qtDva3QE2ZQHwvSiab/14AG8cMRAjMz
-# YRf3Vh+OLzto5xXxd1ZKKZ4D2sIrJmEyW6BW5UkpjTan9cdSolYDIC84eIC99gau
-# QTTLlEW9m8eJGB8Luv+prmpAmRPd71DfAbryBNbQMd80OF5XW8g4HlbUrEim7f/5
-# uME77cIkvkRgp3fN1T2YWbRD6qpgfc3C5S/x6/XUINWXNG5dBGsFEdLTkowJJ0Tt
-# TzUxRn50GQVi7Inj6iNwmOTRL9SKExhGk2XlWHPTTD0neiI/w/ijVbf55oeC7EUe
-# xW46fLFOuato95tj1ZFBvKkCAwEAAaOB+zCB+DAPBgNVHRMBAf8EBTADAQH/MB8G
-# A1UdIwQYMBaAFN0ECQei9Xp9UlMSkpXuOIAlDaZZMDAGCCsGAQUFBwEBBCQwIjAg
-# BggrBgEFBQcwAYYUaHR0cDovL29jc3BzLnNzbC5jb20wEQYDVR0gBAowCDAGBgRV
-# HSAAMBMGA1UdJQQMMAoGCCsGAQUFBwMDMDsGA1UdHwQ0MDIwMKAuoCyGKmh0dHA6
-# Ly9jcmxzLnNzbC5jb20vc3NsLmNvbS1yc2EtUm9vdENBLmNybDAdBgNVHQ4EFgQU
-# VML+EJUAk81q9efA19myS7iPDOMwDgYDVR0PAQH/BAQDAgGGMA0GCSqGSIb3DQEB
-# CwUAA4ICAQD1DyaHcK+Zosr11snwjWY9OYLTiCPYgr+PVIQnttODB9eeJ4lNhI5U
-# 0SDuYEPbV0I8x7CV9r7M6qM9jk8GxitZhn/rcxvK5UAm4D1vzPa9ccbNfQ4gQDnW
-# BdKvlAi/f8JRtyu1e4Mh8GPa5ZzhaS51HU7LYR71pTPfAp0V2e1pk1e6RkUugLxl
-# vucSPt5H/5CcEK32VrKk1PrW/C68lyGzdoPSkfoGUNGxgCiA/tutD2ft+H3c2XBb
-# erpotbNKZheP5/DnV91p/rxe4dWMnxO7lZoV+3krhdVtPmdHbhsHXPtURQ8WES4R
-# w7C8tW4cM1eUHv5CNEaOMVBO2zNXlfo45OYS26tYLkW32SLK9FpHSSwo6E+MQjxk
-# aOnmQ6wZkanHE4Jf/HEKN7edUHs8XfeiUoI15LXn0wpva/6N+aTX1R1L531iCPjZ
-# 16yZSdu1hEEULvYuYJdTS5r+8Yh6dLqedeng2qfJzCw7e0wKeM+U9zZgtoM8ilTL
-# Tg1oKpQRdSYU6iA3zOt5F3ZVeHFt4kk4Mzfb5GxZxyNi5rzOLlRL/V4DKsjdHktx
-# RNB1PjFiZYsppu0k4XodhDR/pBd8tKx9PzVYy8O/Gt2fVFZtReVT84iKKzGjyj5Q
-# 0QA07CcIw2fGXOhov88uFmW4PGb/O7KVq5qNncyU8O14UH/sZEejnTCCBnYwggRe
-# oAMCAQICEHlcJMbs+LJ7AQD1+/722sgwDQYJKoZIhvcNAQELBQAweDELMAkGA1UE
-# BhMCVVMxDjAMBgNVBAgMBVRleGFzMRAwDgYDVQQHDAdIb3VzdG9uMREwDwYDVQQK
-# DAhTU0wgQ29ycDE0MDIGA1UEAwwrU1NMLmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJt
-# ZWRpYXRlIENBIFJTQSBSMTAeFw0yMjA5MDgxODExMTZaFw0yMzA5MDcxODExMTZa
-# MH8xCzAJBgNVBAYTAlVTMRAwDgYDVQQIDAdGbG9yaWRhMRowGAYDVQQHDBFBbHRh
-# bW9udGUgU3ByaW5nczEgMB4GA1UECgwXUHJvdmFsIFRlY2hub2xvZ2llcyBJbmMx
-# IDAeBgNVBAMMF1Byb3ZhbCBUZWNobm9sb2dpZXMgSW5jMIIBojANBgkqhkiG9w0B
-# AQEFAAOCAY8AMIIBigKCAYEAvKxYE9H6zWDDro4T982ORi49oZ3YxNZuVIiFLVFy
-# dDf1/lO2c6ZVxADqxIn6gKXQZU6wonKuBuasJPFFeqtIFOrQ8Yi/CFBzX+u9ejEy
-# 2bk69PIHS1mOre+T4vCWM/RbYMojDQfJqNtjGPQ6Qa1vrjQhDu4WT/7Iqvq0YK6H
-# sp/ApZiq5RLzVxyKa6pGhP4wYJlVmotzq8DHyuxu6NDDAQICKCM8hwVg+JweAZOu
-# iGwMmOgtzkcAa6YM30+dfv8r9mhCm7mZZU0UcaYxaIagtNgWDa5bQJ8qUzu5VnU1
-# sn5f2k8mPd5Lm1lSTK8OVe2kJG47WbiVDDt7mA5g3PG8N5EWH0/8oAOEWQRpMFja
-# 8DlEdl4DhYyuN++I86WvyVuk2lP7/XrKSwe0S2KFMCjjT8jExBOXASTivdSMAXqH
-# om9EkmGnb7QtlcYWlYgddopd5oDsT9eKP3JES+LC96IgAaqWLD4AStLaulnviVcl
-# /vRhdhpI3txnOIzvtbPwd3DRAgMBAAGjggFzMIIBbzAMBgNVHRMBAf8EAjAAMB8G
-# A1UdIwQYMBaAFFTC/hCVAJPNavXnwNfZsku4jwzjMFgGCCsGAQUFBwEBBEwwSjBI
-# BggrBgEFBQcwAoY8aHR0cDovL2NlcnQuc3NsLmNvbS9TU0xjb20tU3ViQ0EtQ29k
-# ZVNpZ25pbmctUlNBLTQwOTYtUjEuY2VyMFEGA1UdIARKMEgwCAYGZ4EMAQQBMDwG
-# DCsGAQQBgqkwAQMDATAsMCoGCCsGAQUFBwIBFh5odHRwczovL3d3dy5zc2wuY29t
-# L3JlcG9zaXRvcnkwEwYDVR0lBAwwCgYIKwYBBQUHAwMwTQYDVR0fBEYwRDBCoECg
-# PoY8aHR0cDovL2NybHMuc3NsLmNvbS9TU0xjb20tU3ViQ0EtQ29kZVNpZ25pbmct
-# UlNBLTQwOTYtUjEuY3JsMB0GA1UdDgQWBBTgGMwkPoaXHQprDWA3aheA76AuQzAO
-# BgNVHQ8BAf8EBAMCB4AwDQYJKoZIhvcNAQELBQADggIBAEh5tU/zuMAHplJ+WwH0
-# Ep1s+K2jvVz0sFsrUKozGnUsgk6p8/7jt+/nXbGAZ5Wt9twG5f+81e904NnWA8uM
-# jPVvTMS/Wd2spZ4HESO3M+AP9utp8tqUa42N2DUjXjNauHhgV7DG9m6ilRNXWfYP
-# akpPi6SzqRMRKR+Jr2Y4461C9JEIZb8rUg1qSEImYCGCOyRVu01FwnTbY50S4aiC
-# dPLH8oJOLXbjtdF0QuDacV3mRHqqFPBKVvCX6yER+c4P61lcoApbUhy5FWhpNI6V
-# qy2Qg5qrhvQqIYTXQDxtjzIWXQJYo2n8noOWB87yueqplmbxnplW0Sv0zlwofFGT
-# Stw4w0/KLspU3tWNKxujJfcl+6wR2jrt7HooieaP5ln7HvCkee50OfOJJC96gApv
-# VldlplT0UClns4r/QrEM4pVSjLIQZUA6jWCAH6CGiHbkI0KF45jTdNMeiC93L5cz
-# pUVGsPj4/wU7bY3LPsepmxwndFbiT2/vdkm0UsA0gJ6nlnMU8D2OdFN82msN0oB/
-# 2Vnl30VwuSifD3ezKuPtMG6aqHcxmq5WXPGfvAJGh67ka4WBQ9Ofgq9t/4fYJeux
-# t8WmNpq8HqpS2PHPiegaj+JkeL1qtdWGoyCGUABul3Fm1c545//0eXDnolM9N+2y
-# PVo4/dSV3+OQROHar7pIE1nFMIIG7DCCBNSgAwIBAgIQMA9vrN1mmHR8qUY2p3gt
-# uTANBgkqhkiG9w0BAQwFADCBiDELMAkGA1UEBhMCVVMxEzARBgNVBAgTCk5ldyBK
-# ZXJzZXkxFDASBgNVBAcTC0plcnNleSBDaXR5MR4wHAYDVQQKExVUaGUgVVNFUlRS
-# VVNUIE5ldHdvcmsxLjAsBgNVBAMTJVVTRVJUcnVzdCBSU0EgQ2VydGlmaWNhdGlv
-# biBBdXRob3JpdHkwHhcNMTkwNTAyMDAwMDAwWhcNMzgwMTE4MjM1OTU5WjB9MQsw
-# CQYDVQQGEwJHQjEbMBkGA1UECBMSR3JlYXRlciBNYW5jaGVzdGVyMRAwDgYDVQQH
-# EwdTYWxmb3JkMRgwFgYDVQQKEw9TZWN0aWdvIExpbWl0ZWQxJTAjBgNVBAMTHFNl
-# Y3RpZ28gUlNBIFRpbWUgU3RhbXBpbmcgQ0EwggIiMA0GCSqGSIb3DQEBAQUAA4IC
-# DwAwggIKAoICAQDIGwGv2Sx+iJl9AZg/IJC9nIAhVJO5z6A+U++zWsB21hoEpc5H
-# g7XrxMxJNMvzRWW5+adkFiYJ+9UyUnkuyWPCE5u2hj8BBZJmbyGr1XEQeYf0RirN
-# xFrJ29ddSU1yVg/cyeNTmDoqHvzOWEnTv/M5u7mkI0Ks0BXDf56iXNc48RaycNOj
-# xN+zxXKsLgp3/A2UUrf8H5VzJD0BKLwPDU+zkQGObp0ndVXRFzs0IXuXAZSvf4DP
-# 0REKV4TJf1bgvUacgr6Unb+0ILBgfrhN9Q0/29DqhYyKVnHRLZRMyIw80xSinL0m
-# /9NTIMdgaZtYClT0Bef9Maz5yIUXx7gpGaQpL0bj3duRX58/Nj4OMGcrRrc1r5a+
-# 2kxgzKi7nw0U1BjEMJh0giHPYla1IXMSHv2qyghYh3ekFesZVf/QOVQtJu5FGjpv
-# zdeE8NfwKMVPZIMC1Pvi3vG8Aij0bdonigbSlofe6GsO8Ft96XZpkyAcSpcsdxkr
-# k5WYnJee647BeFbGRCXfBhKaBi2fA179g6JTZ8qx+o2hZMmIklnLqEbAyfKm/31X
-# 2xJ2+opBJNQb/HKlFKLUrUMcpEmLQTkUAx4p+hulIq6lw02C0I3aa7fb9xhAV3Pw
-# caP7Sn1FNsH3jYL6uckNU4B9+rY5WDLvbxhQiddPnTO9GrWdod6VQXqngwIDAQAB
-# o4IBWjCCAVYwHwYDVR0jBBgwFoAUU3m/WqorSs9UgOHYm8Cd8rIDZsswHQYDVR0O
-# BBYEFBqh+GEZIA/DQXdFKI7RNV8GEgRVMA4GA1UdDwEB/wQEAwIBhjASBgNVHRMB
-# Af8ECDAGAQH/AgEAMBMGA1UdJQQMMAoGCCsGAQUFBwMIMBEGA1UdIAQKMAgwBgYE
-# VR0gADBQBgNVHR8ESTBHMEWgQ6BBhj9odHRwOi8vY3JsLnVzZXJ0cnVzdC5jb20v
-# VVNFUlRydXN0UlNBQ2VydGlmaWNhdGlvbkF1dGhvcml0eS5jcmwwdgYIKwYBBQUH
-# AQEEajBoMD8GCCsGAQUFBzAChjNodHRwOi8vY3J0LnVzZXJ0cnVzdC5jb20vVVNF
-# UlRydXN0UlNBQWRkVHJ1c3RDQS5jcnQwJQYIKwYBBQUHMAGGGWh0dHA6Ly9vY3Nw
-# LnVzZXJ0cnVzdC5jb20wDQYJKoZIhvcNAQEMBQADggIBAG1UgaUzXRbhtVOBkXXf
-# A3oyCy0lhBGysNsqfSoF9bw7J/RaoLlJWZApbGHLtVDb4n35nwDvQMOt0+LkVvlY
-# Qc/xQuUQff+wdB+PxlwJ+TNe6qAcJlhc87QRD9XVw+K81Vh4v0h24URnbY+wQxAP
-# jeT5OGK/EwHFhaNMxcyyUzCVpNb0llYIuM1cfwGWvnJSajtCN3wWeDmTk5Sbsdyy
-# bUFtZ83Jb5A9f0VywRsj1sJVhGbks8VmBvbz1kteraMrQoohkv6ob1olcGKBc2Ne
-# oLvY3NdK0z2vgwY4Eh0khy3k/ALWPncEvAQ2ted3y5wujSMYuaPCRx3wXdahc1cF
-# aJqnyTdlHb7qvNhCg0MFpYumCf/RoZSmTqo9CfUFbLfSZFrYKiLCS53xOV5M3kg9
-# mzSWmglfjv33sVKRzj+J9hyhtal1H3G/W0NdZT1QgW6r8NDT/LKzH7aZlib0PHmL
-# XGTMze4nmuWgwAxyh8FuTVrTHurwROYybxzrF06Uw3hlIDsPQaof6aFBnf6xuKBl
-# KjTg3qj5PObBMLvAoGMs/FwWAKjQxH/qEZ0eBsambTJdtDgJK0kHqv3sMNrxpy/P
-# t/360KOE2See+wFmd7lWEOEgbsausfm2usg1XTN2jvF8IAwqd661ogKGuinutFoA
-# sYyr4/kKyVRd1LlqdJ69SK6YMIIG9jCCBN6gAwIBAgIRAJA5f5rSSjoT8r2RXwg4
-# qUMwDQYJKoZIhvcNAQEMBQAwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdyZWF0
-# ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2VjdGln
-# byBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5nIENB
-# MB4XDTIyMDUxMTAwMDAwMFoXDTMzMDgxMDIzNTk1OVowajELMAkGA1UEBhMCR0Ix
-# EzARBgNVBAgTCk1hbmNoZXN0ZXIxGDAWBgNVBAoTD1NlY3RpZ28gTGltaXRlZDEs
-# MCoGA1UEAwwjU2VjdGlnbyBSU0EgVGltZSBTdGFtcGluZyBTaWduZXIgIzMwggIi
-# MA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQCQsnE/eeHUuYoXzMOXwpCUcu1a
-# Om8BQ39zWiifJHygNUAG+pSvCqGDthPkSxUGXmqKIDRxe7slrT9bCqQfL2x9LmFR
-# 0IxZNz6mXfEeXYC22B9g480Saogfxv4Yy5NDVnrHzgPWAGQoViKxSxnS8JbJRB85
-# XZywlu1aSY1+cuRDa3/JoD9sSq3VAE+9CriDxb2YLAd2AXBF3sPwQmnq/ybMA0Qf
-# FijhanS2nEX6tjrOlNEfvYxlqv38wzzoDZw4ZtX8fR6bWYyRWkJXVVAWDUt0cu6g
-# KjH8JgI0+WQbWf3jOtTouEEpdAE/DeATdysRPPs9zdDn4ZdbVfcqA23VzWLazpwe
-# /OpwfeZ9S2jOWilh06BcJbOlJ2ijWP31LWvKX2THaygM2qx4Qd6S7w/F7KvfLW8a
-# VFFsM7ONWWDn3+gXIqN5QWLP/Hvzktqu4DxPD1rMbt8fvCKvtzgQmjSnC//+HV6k
-# 8+4WOCs/rHaUQZ1kHfqA/QDh/vg61MNeu2lNcpnl8TItUfphrU3qJo5t/KlImD7y
-# Rg1psbdu9AXbQQXGGMBQ5Pit/qxjYUeRvEa1RlNsxfThhieThDlsdeAdDHpZiy7L
-# 9GQsQkf0VFiFN+XHaafSJYuWv8at4L2xN/cf30J7qusc6es9Wt340pDVSZo6HYMa
-# V38cAcLOHH3M+5YVxQIDAQABo4IBgjCCAX4wHwYDVR0jBBgwFoAUGqH4YRkgD8NB
-# d0UojtE1XwYSBFUwHQYDVR0OBBYEFCUuaDxrmiskFKkfot8mOs8UpvHgMA4GA1Ud
-# DwEB/wQEAwIGwDAMBgNVHRMBAf8EAjAAMBYGA1UdJQEB/wQMMAoGCCsGAQUFBwMI
-# MEoGA1UdIARDMEEwNQYMKwYBBAGyMQECAQMIMCUwIwYIKwYBBQUHAgEWF2h0dHBz
-# Oi8vc2VjdGlnby5jb20vQ1BTMAgGBmeBDAEEAjBEBgNVHR8EPTA7MDmgN6A1hjNo
-# dHRwOi8vY3JsLnNlY3RpZ28uY29tL1NlY3RpZ29SU0FUaW1lU3RhbXBpbmdDQS5j
-# cmwwdAYIKwYBBQUHAQEEaDBmMD8GCCsGAQUFBzAChjNodHRwOi8vY3J0LnNlY3Rp
-# Z28uY29tL1NlY3RpZ29SU0FUaW1lU3RhbXBpbmdDQS5jcnQwIwYIKwYBBQUHMAGG
-# F2h0dHA6Ly9vY3NwLnNlY3RpZ28uY29tMA0GCSqGSIb3DQEBDAUAA4ICAQBz2u1o
-# csvCuUChMbu0A6MtFHsk57RbFX2o6f2t0ZINfD02oGnZ85ow2qxp1nRXJD9+DzzZ
-# 9cN5JWwm6I1ok87xd4k5f6gEBdo0wxTqnwhUq//EfpZsK9OU67Rs4EVNLLL3Ozta
-# tcH714l1bZhycvb3Byjz07LQ6xm+FSx4781FoADk+AR2u1fFkL53VJB0ngtPTcSq
-# E4+XrwE1K8ubEXjp8vmJBDxO44ISYuu0RAx1QcIPNLiIncgi8RNq2xgvbnitxAW0
-# 6IQIkwf5fYP+aJg05Hflsc6MlGzbA20oBUd+my7wZPvbpAMxEHwa+zwZgNELcLlV
-# X0e+OWTOt9ojVDLjRrIy2NIphskVXYCVrwL7tNEunTh8NeAPHO0bR0icImpVgtny
-# ughlA+XxKfNIigkBTKZ58qK2GpmU65co4b59G6F87VaApvQiM5DkhFP8KvrAp5eo
-# 6rWNes7k4EuhM6sLdqDVaRa3jma/X/ofxKh/p6FIFJENgvy9TZntyeZsNv53Q5m4
-# aS18YS/to7BJ/lu+aSSR/5P8V2mSS9kFP22GctOi0MBk0jpCwRoD+9DtmiG4P6+m
-# slFU1UzFyh8SjVfGOe1c/+yfJnatZGZn6Kow4NKtt32xakEnbgOKo3TgigmCbr/j
-# 9re8ngspGGiBoZw/bhZZSxQJCZrmrr9gFd2G9TGCBf4wggX6AgEBMIGMMHgxCzAJ
+# MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
+# BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCsvnv/9QnxIeeW
+# kpiRrjgqovSglFWemBq7NomeNwMjwqCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
+# ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
+# cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
+# ZXR3b3JrIENBMB4XDTE4MDkxMTA5MjY0N1oXDTIzMDkxMTA5MjY0N1owfDELMAkG
+# A1UEBhMCVVMxDjAMBgNVBAgMBVRleGFzMRAwDgYDVQQHDAdIb3VzdG9uMRgwFgYD
+# VQQKDA9TU0wgQ29ycG9yYXRpb24xMTAvBgNVBAMMKFNTTC5jb20gUm9vdCBDZXJ0
+# aWZpY2F0aW9uIEF1dGhvcml0eSBSU0EwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAw
+# ggIKAoICAQD5D92jK33L0Cr+7GeFpucuG7p34eP1r6Ts+kpdkcRXR2sYd2t28v2T
+# 5D0PwhaeC2bDVpSeF4OFzlbv8hb9AGL1IglU6GUXTkG54E9Gl6obyLhuYl5psV/b
+# KgJ+/GzK80HY7dDo/D9hSO2wAxQdEA5LGeC7TuyGZf82815nAgudhlVh/Xo47f7i
+# GQC3b6FQYnV0PKD6yCWStG56Isf4HqHjst2RMasrHQT/pUoEN+mFpDMr/eLWVTR8
+# GaRKaMeyqNO3yqGTiOvBl7yM+R3ZIoQkdMcEPWqpKZPM67hb4f5fJao0WMjBI1Sd
+# G5gRwzicfj2GbKUPQIZ8AvRcAk8oy65xnw86yDP+ESU16vy6xWA92XwY1bKp03V4
+# A3IiyjrDH+8s5S6p+p4stlFG/a8D1upgaOqFFjZrhekewLPdxCTcgCqBQW2UPsjg
+# yYFBAJ5ev3/FCJiiGCxCQLP5bzgnS06A9D2BR+CIfOoczrV1XFEuHCt/GnIo5wC1
+# 0XTG1+SfrQeTtlM1Nfw35MP2XRa+IXPekgr4oGNqvJaSaj74vGVVm971DYkmBPwl
+# GqYlacvCbcp84llfl6zr7y7IvNcbWTwrzPIZyJNrJ2MZz/zpJvjKcZt/k/40Z4RO
+# mev8s3gJM3C6ZqZ27Rtz6xqlDcQiEyCUVgpOLGxOsf3PnAm6ojPthwIDAQABo4IB
+# UTCCAU0wEgYDVR0TAQH/BAgwBgEB/wIBAjAdBgNVHQ4EFgQU3QQJB6L1en1SUxKS
+# le44gCUNplkwHwYDVR0jBBgwFoAUCHbNywf/JPbFze27kLzihDdGdfcwDgYDVR0P
+# AQH/BAQDAgEGMDYGA1UdHwQvMC0wK6ApoCeGJWh0dHA6Ly9zc2xjb20uY3JsLmNl
+# cnR1bS5wbC9jdG5jYS5jcmwwcwYIKwYBBQUHAQEEZzBlMCkGCCsGAQUFBzABhh1o
+# dHRwOi8vc3NsY29tLm9jc3AtY2VydHVtLmNvbTA4BggrBgEFBQcwAoYsaHR0cDov
+# L3NzbGNvbS5yZXBvc2l0b3J5LmNlcnR1bS5wbC9jdG5jYS5jZXIwOgYDVR0gBDMw
+# MTAvBgRVHSAAMCcwJQYIKwYBBQUHAgEWGWh0dHBzOi8vd3d3LmNlcnR1bS5wbC9D
+# UFMwDQYJKoZIhvcNAQELBQADggEBAB+VmiNU7oXC89RvuekEj0Z/LPcywKdDrAcA
+# 7eCpRS39F+HtAEDIr5is9cAZrRuglzBAbOxb+6OTToyJYht88Dpfp0LPWMp1ZZwi
+# TL92e5iTnBWDM7EO3FE4h3yVnBJplB4AeHR+3MAGd7pwLYcs12id47qFrUnzj2S0
+# FQaDksaXpECTi63xZ5S0uVpnVDyoG9kFz+Sk+YgSAAaIJYXUXu7zk1fWgfgsrvf1
+# UUirtmI6edvsLvI/FFY6yNnLpKJPJajRm6stMCBQBxpv8fGUHTmDY+gf/UnQ6B1G
+# skaCJr2cneGiaEFIUW56/DWW9FTSvCtE5UfXd4KlSqtflzOrJBEwggZyMIIEWqAD
+# AgECAghkM1HTxzifCDANBgkqhkiG9w0BAQsFADB8MQswCQYDVQQGEwJVUzEOMAwG
+# A1UECAwFVGV4YXMxEDAOBgNVBAcMB0hvdXN0b24xGDAWBgNVBAoMD1NTTCBDb3Jw
+# b3JhdGlvbjExMC8GA1UEAwwoU1NMLmNvbSBSb290IENlcnRpZmljYXRpb24gQXV0
+# aG9yaXR5IFJTQTAeFw0xNjA2MjQyMDQ0MzBaFw0zMTA2MjQyMDQ0MzBaMHgxCzAJ
 # BgNVBAYTAlVTMQ4wDAYDVQQIDAVUZXhhczEQMA4GA1UEBwwHSG91c3RvbjERMA8G
 # A1UECgwIU1NMIENvcnAxNDAyBgNVBAMMK1NTTC5jb20gQ29kZSBTaWduaW5nIElu
-# dGVybWVkaWF0ZSBDQSBSU0EgUjECEHlcJMbs+LJ7AQD1+/722sgwCQYFKw4DAhoF
-# AKB4MBgGCisGAQQBgjcCAQwxCjAIoAKAAKECgAAwGQYJKoZIhvcNAQkDMQwGCisG
-# AQQBgjcCAQQwHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQBgjcCARUwIwYJKoZIhvcN
-# AQkEMRYEFLRyRvRVgsCPYgEac7cM0ftlqv45MA0GCSqGSIb3DQEBAQUABIIBgFB0
-# DjLdkcuP68d5oRKNTld2KSyT6YrocKhkzHipjEHwr/oZK5hROXqlDsEwt05UY1Sy
-# uH75lE90p5KS3oMEKx9EsvJItMdXA7Bre5Fnq/IYVLltcGfRm57uxIYxC08U0KXG
-# FWHoj8g9V6WYFOBzvi8Dzf54AGXjkck2sTXI40GC9a2XZ7kM6PAFo02Uf9B9ZUxM
-# DnF8JXqO9Nom1B1Vry0sud8UaXZN/Sj2lYZ52YdhFJEMEU9+5wfvMIrgFUWmSsQ4
-# O0jidLKXKquJCNWuXU6n84KVSxlM+kHuy8vmK1ty1aNLM70XNFv8kxjJuli1rOZj
-# LBsntbIeKNbHmDxWhoq7A8ROQgIWaRxzBzt5zS2gJk15U40lf5IcpIpAaxB5beft
-# Wz5TMcJulm2RP8BojmFKa2BlTo9GRYRZ3EUXqo/BvdaFKoAjjV9Q4PYvklBF8U+5
-# pEUpA464FYK5R7lq/PnsQKdKtVJHfJdVQf77Os7BPD6bPea9fSDLysF0XQpn56GC
-# A0wwggNIBgkqhkiG9w0BCQYxggM5MIIDNQIBATCBkjB9MQswCQYDVQQGEwJHQjEb
-# MBkGA1UECBMSR3JlYXRlciBNYW5jaGVzdGVyMRAwDgYDVQQHEwdTYWxmb3JkMRgw
-# FgYDVQQKEw9TZWN0aWdvIExpbWl0ZWQxJTAjBgNVBAMTHFNlY3RpZ28gUlNBIFRp
-# bWUgU3RhbXBpbmcgQ0ECEQCQOX+a0ko6E/K9kV8IOKlDMA0GCWCGSAFlAwQCAgUA
-# oHkwGAYJKoZIhvcNAQkDMQsGCSqGSIb3DQEHATAcBgkqhkiG9w0BCQUxDxcNMjIw
-# OTI2MTgxODA2WjA/BgkqhkiG9w0BCQQxMgQw/Onpkw3ewcgeDSgTJJPOir6Td+Ij
-# xDDgxFgGNERPKSnuUWKu/YwcZ8qQxXWVsRi3MA0GCSqGSIb3DQEBAQUABIICAA2G
-# q11qdSTSX09Z2/5ht7fnEygLzQOdLd9j2F2V1MQMizWOGBFvY4fkIkHYg8+98MTJ
-# 5CrJLgGUs/UpOqy6tHayuyiZxMLLUCzr9/tjRfx2in/6bUbxF5Em36ybwvMovIs+
-# frPMJhLlq9HHg7V/yjpdiKVV7fQtDh/gHyZvQzg5Ln2HUVyRZ5Gk752aRRiTMHYP
-# AVvcrJSaTQNnH463lmhHtySnVeiuAqgtZHRkkrvFza1e8ewCQzsJh7DUJ85+rE9u
-# +GzNta05tX6Y1mjwev+aFVHDlhDVgDymdkdeM6Y8s4RaVX6T6n36MMb5npPM/UB8
-# AAtnVnk4bdZ/o48jMYSDR4lqrdw+ursrX11tq+2Dafzs5t0xnRZj9AsZKivXSRy6
-# FFfvVzVgbs6L6ZgA6HUdbjAjM7YPXPHEhT+SHzZYPjIQOxFNBwRN1UQ+fF44h+0w
-# akyALwr+Ic+0+ZP7AcPH8N5WhOhrnDevvyMnv3R0t8VrBxjYYcQOMIAW71rSy49U
-# 3zefDKQkVcUpRmr2mpkYP8IoigQ+QBph9QOW62DLujDAs9sTgbOAXY2FfShk3Jcv
-# 9CCrE8yt9UXwyv37y9VJFM1Ca8V56iT0WRJzBdMyuF+Jl9ifMyQdtePvBQshjKER
-# kawWH4F4gJnbI43DuEIhJuOM6LS/UV343xH2n6cy
+# dGVybWVkaWF0ZSBDQSBSU0EgUjEwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIK
+# AoICAQCfgxNzqrDGbSHL24t6h3TQcdyOl3Ka5LuINLTdgAPGL0WkdJq/Hg9Q6p5t
+# ePOf+lEmqT2d0bKUVz77OYkbkStW72fL5gvjDjmMxjX0jD3dJekBrBdCfVgWQNz5
+# 1ShEHZVkMGE6ZPKX13NMfXsjAm3zdetVPW+qLcSvvnSsXf5qtvzqXHnpD0OctVIF
+# D+8+sbGP0EmtpuNCGVQ/8y8Ooct8/hP5IznaJRy4PgBKOm8yMDdkHseudQfYVdIY
+# yQ6KvKNc8HwKp4WBwg6vj5lc02AlvINaaRwlE81y9eucgJvcLGfE3ckJmNVz68Qh
+# o+Uyjj4vUpjGYDdkjLJvSlRyGMwnh/rNdaJjIUy1PWT9K6abVa8mTGC0uVz+q0O9
+# rdATZlAfC9KJpv/XgAbxwxECMzNhF/dWH44vO2jnFfF3VkopngPawismYTJboFbl
+# SSmNNqf1x1KiVgMgLzh4gL32Bq5BNMuURb2bx4kYHwu6/6muakCZE93vUN8BuvIE
+# 1tAx3zQ4XldbyDgeVtSsSKbt//m4wTvtwiS+RGCnd83VPZhZtEPqqmB9zcLlL/Hr
+# 9dQg1Zc0bl0EawUR0tOSjAknRO1PNTFGfnQZBWLsiePqI3CY5NEv1IoTGEaTZeVY
+# c9NMPSd6Ij/D+KNVt/nmh4LsRR7Fbjp8sU65q2j3m2PVkUG8qQIDAQABo4H7MIH4
+# MA8GA1UdEwEB/wQFMAMBAf8wHwYDVR0jBBgwFoAU3QQJB6L1en1SUxKSle44gCUN
+# plkwMAYIKwYBBQUHAQEEJDAiMCAGCCsGAQUFBzABhhRodHRwOi8vb2NzcHMuc3Ns
+# LmNvbTARBgNVHSAECjAIMAYGBFUdIAAwEwYDVR0lBAwwCgYIKwYBBQUHAwMwOwYD
+# VR0fBDQwMjAwoC6gLIYqaHR0cDovL2NybHMuc3NsLmNvbS9zc2wuY29tLXJzYS1S
+# b290Q0EuY3JsMB0GA1UdDgQWBBRUwv4QlQCTzWr158DX2bJLuI8M4zAOBgNVHQ8B
+# Af8EBAMCAYYwDQYJKoZIhvcNAQELBQADggIBAPUPJodwr5miyvXWyfCNZj05gtOI
+# I9iCv49UhCe204MH154niU2EjlTRIO5gQ9tXQjzHsJX2vszqoz2OTwbGK1mGf+tz
+# G8rlQCbgPW/M9r1xxs19DiBAOdYF0q+UCL9/wlG3K7V7gyHwY9rlnOFpLnUdTsth
+# HvWlM98CnRXZ7WmTV7pGRS6AvGW+5xI+3kf/kJwQrfZWsqTU+tb8LryXIbN2g9KR
+# +gZQ0bGAKID+260PZ+34fdzZcFt6umi1s0pmF4/n8OdX3Wn+vF7h1YyfE7uVmhX7
+# eSuF1W0+Z0duGwdc+1RFDxYRLhHDsLy1bhwzV5Qe/kI0Ro4xUE7bM1eV+jjk5hLb
+# q1guRbfZIsr0WkdJLCjoT4xCPGRo6eZDrBmRqccTgl/8cQo3t51Qezxd96JSgjXk
+# tefTCm9r/o35pNfVHUvnfWII+NnXrJlJ27WEQRQu9i5gl1NLmv7xiHp0up516eDa
+# p8nMLDt7TAp4z5T3NmC2gzyKVMtODWgqlBF1JhTqIDfM63kXdlV4cW3iSTgzN9vk
+# bFnHI2LmvM4uVEv9XgMqyN0eS3FE0HU+MWJliymm7STheh2ENH+kF3y0rH0/NVjL
+# w78a3Z9UVm1F5VPziIorMaPKPlDRADTsJwjDZ8Zc6Gi/zy4WZbg8Zv87spWrmo2d
+# zJTw7XhQf+xkR6OdMIIGdjCCBF6gAwIBAgIQeVwkxuz4snsBAPX7/vbayDANBgkq
+# hkiG9w0BAQsFADB4MQswCQYDVQQGEwJVUzEOMAwGA1UECAwFVGV4YXMxEDAOBgNV
+# BAcMB0hvdXN0b24xETAPBgNVBAoMCFNTTCBDb3JwMTQwMgYDVQQDDCtTU0wuY29t
+# IENvZGUgU2lnbmluZyBJbnRlcm1lZGlhdGUgQ0EgUlNBIFIxMB4XDTIyMDkwODE4
+# MTExNloXDTIzMDkwNzE4MTExNlowfzELMAkGA1UEBhMCVVMxEDAOBgNVBAgMB0Zs
+# b3JpZGExGjAYBgNVBAcMEUFsdGFtb250ZSBTcHJpbmdzMSAwHgYDVQQKDBdQcm92
+# YWwgVGVjaG5vbG9naWVzIEluYzEgMB4GA1UEAwwXUHJvdmFsIFRlY2hub2xvZ2ll
+# cyBJbmMwggGiMA0GCSqGSIb3DQEBAQUAA4IBjwAwggGKAoIBgQC8rFgT0frNYMOu
+# jhP3zY5GLj2hndjE1m5UiIUtUXJ0N/X+U7ZzplXEAOrEifqApdBlTrCicq4G5qwk
+# 8UV6q0gU6tDxiL8IUHNf6716MTLZuTr08gdLWY6t75Pi8JYz9FtgyiMNB8mo22MY
+# 9DpBrW+uNCEO7hZP/siq+rRgroeyn8ClmKrlEvNXHIprqkaE/jBgmVWai3OrwMfK
+# 7G7o0MMBAgIoIzyHBWD4nB4Bk66IbAyY6C3ORwBrpgzfT51+/yv2aEKbuZllTRRx
+# pjFohqC02BYNrltAnypTO7lWdTWyfl/aTyY93kubWVJMrw5V7aQkbjtZuJUMO3uY
+# DmDc8bw3kRYfT/ygA4RZBGkwWNrwOUR2XgOFjK4374jzpa/JW6TaU/v9espLB7RL
+# YoUwKONPyMTEE5cBJOK91IwBeoeib0SSYadvtC2VxhaViB12il3mgOxP14o/ckRL
+# 4sL3oiABqpYsPgBK0tq6We+JVyX+9GF2Gkje3Gc4jO+1s/B3cNECAwEAAaOCAXMw
+# ggFvMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUVML+EJUAk81q9efA19myS7iP
+# DOMwWAYIKwYBBQUHAQEETDBKMEgGCCsGAQUFBzAChjxodHRwOi8vY2VydC5zc2wu
+# Y29tL1NTTGNvbS1TdWJDQS1Db2RlU2lnbmluZy1SU0EtNDA5Ni1SMS5jZXIwUQYD
+# VR0gBEowSDAIBgZngQwBBAEwPAYMKwYBBAGCqTABAwMBMCwwKgYIKwYBBQUHAgEW
+# Hmh0dHBzOi8vd3d3LnNzbC5jb20vcmVwb3NpdG9yeTATBgNVHSUEDDAKBggrBgEF
+# BQcDAzBNBgNVHR8ERjBEMEKgQKA+hjxodHRwOi8vY3Jscy5zc2wuY29tL1NTTGNv
+# bS1TdWJDQS1Db2RlU2lnbmluZy1SU0EtNDA5Ni1SMS5jcmwwHQYDVR0OBBYEFOAY
+# zCQ+hpcdCmsNYDdqF4DvoC5DMA4GA1UdDwEB/wQEAwIHgDANBgkqhkiG9w0BAQsF
+# AAOCAgEASHm1T/O4wAemUn5bAfQSnWz4raO9XPSwWytQqjMadSyCTqnz/uO37+dd
+# sYBnla323Abl/7zV73Tg2dYDy4yM9W9MxL9Z3aylngcRI7cz4A/262ny2pRrjY3Y
+# NSNeM1q4eGBXsMb2bqKVE1dZ9g9qSk+LpLOpExEpH4mvZjjjrUL0kQhlvytSDWpI
+# QiZgIYI7JFW7TUXCdNtjnRLhqIJ08sfygk4tduO10XRC4NpxXeZEeqoU8EpW8Jfr
+# IRH5zg/rWVygCltSHLkVaGk0jpWrLZCDmquG9CohhNdAPG2PMhZdAlijafyeg5YH
+# zvK56qmWZvGemVbRK/TOXCh8UZNK3DjDT8ouylTe1Y0rG6Ml9yX7rBHaOu3seiiJ
+# 5o/mWfse8KR57nQ584kkL3qACm9WV2WmVPRQKWeziv9CsQzilVKMshBlQDqNYIAf
+# oIaIduQjQoXjmNN00x6IL3cvlzOlRUaw+Pj/BTttjcs+x6mbHCd0VuJPb+92SbRS
+# wDSAnqeWcxTwPY50U3zaaw3SgH/ZWeXfRXC5KJ8Pd7Mq4+0wbpqodzGarlZc8Z+8
+# AkaHruRrhYFD05+Cr23/h9gl67G3xaY2mrweqlLY8c+J6BqP4mR4vWq11YajIIZQ
+# AG6XcWbVznjn//R5cOeiUz037bI9Wjj91JXf45BE4dqvukgTWcUwggbsMIIE1KAD
+# AgECAhAwD2+s3WaYdHypRjaneC25MA0GCSqGSIb3DQEBDAUAMIGIMQswCQYDVQQG
+# EwJVUzETMBEGA1UECBMKTmV3IEplcnNleTEUMBIGA1UEBxMLSmVyc2V5IENpdHkx
+# HjAcBgNVBAoTFVRoZSBVU0VSVFJVU1QgTmV0d29yazEuMCwGA1UEAxMlVVNFUlRy
+# dXN0IFJTQSBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0eTAeFw0xOTA1MDIwMDAwMDBa
+# Fw0zODAxMTgyMzU5NTlaMH0xCzAJBgNVBAYTAkdCMRswGQYDVQQIExJHcmVhdGVy
+# IE1hbmNoZXN0ZXIxEDAOBgNVBAcTB1NhbGZvcmQxGDAWBgNVBAoTD1NlY3RpZ28g
+# TGltaXRlZDElMCMGA1UEAxMcU2VjdGlnbyBSU0EgVGltZSBTdGFtcGluZyBDQTCC
+# AiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAMgbAa/ZLH6ImX0BmD8gkL2c
+# gCFUk7nPoD5T77NawHbWGgSlzkeDtevEzEk0y/NFZbn5p2QWJgn71TJSeS7JY8IT
+# m7aGPwEFkmZvIavVcRB5h/RGKs3EWsnb111JTXJWD9zJ41OYOioe/M5YSdO/8zm7
+# uaQjQqzQFcN/nqJc1zjxFrJw06PE37PFcqwuCnf8DZRSt/wflXMkPQEovA8NT7OR
+# AY5unSd1VdEXOzQhe5cBlK9/gM/REQpXhMl/VuC9RpyCvpSdv7QgsGB+uE31DT/b
+# 0OqFjIpWcdEtlEzIjDzTFKKcvSb/01Mgx2Bpm1gKVPQF5/0xrPnIhRfHuCkZpCkv
+# RuPd25Ffnz82Pg4wZytGtzWvlr7aTGDMqLufDRTUGMQwmHSCIc9iVrUhcxIe/arK
+# CFiHd6QV6xlV/9A5VC0m7kUaOm/N14Tw1/AoxU9kgwLU++Le8bwCKPRt2ieKBtKW
+# h97oaw7wW33pdmmTIBxKlyx3GSuTlZicl57rjsF4VsZEJd8GEpoGLZ8DXv2DolNn
+# yrH6jaFkyYiSWcuoRsDJ8qb/fVfbEnb6ikEk1Bv8cqUUotStQxykSYtBORQDHin6
+# G6UirqXDTYLQjdprt9v3GEBXc/Bxo/tKfUU2wfeNgvq5yQ1TgH36tjlYMu9vGFCJ
+# 10+dM70atZ2h3pVBeqeDAgMBAAGjggFaMIIBVjAfBgNVHSMEGDAWgBRTeb9aqitK
+# z1SA4dibwJ3ysgNmyzAdBgNVHQ4EFgQUGqH4YRkgD8NBd0UojtE1XwYSBFUwDgYD
+# VR0PAQH/BAQDAgGGMBIGA1UdEwEB/wQIMAYBAf8CAQAwEwYDVR0lBAwwCgYIKwYB
+# BQUHAwgwEQYDVR0gBAowCDAGBgRVHSAAMFAGA1UdHwRJMEcwRaBDoEGGP2h0dHA6
+# Ly9jcmwudXNlcnRydXN0LmNvbS9VU0VSVHJ1c3RSU0FDZXJ0aWZpY2F0aW9uQXV0
+# aG9yaXR5LmNybDB2BggrBgEFBQcBAQRqMGgwPwYIKwYBBQUHMAKGM2h0dHA6Ly9j
+# cnQudXNlcnRydXN0LmNvbS9VU0VSVHJ1c3RSU0FBZGRUcnVzdENBLmNydDAlBggr
+# BgEFBQcwAYYZaHR0cDovL29jc3AudXNlcnRydXN0LmNvbTANBgkqhkiG9w0BAQwF
+# AAOCAgEAbVSBpTNdFuG1U4GRdd8DejILLSWEEbKw2yp9KgX1vDsn9FqguUlZkCls
+# Ycu1UNviffmfAO9Aw63T4uRW+VhBz/FC5RB9/7B0H4/GXAn5M17qoBwmWFzztBEP
+# 1dXD4rzVWHi/SHbhRGdtj7BDEA+N5Pk4Yr8TAcWFo0zFzLJTMJWk1vSWVgi4zVx/
+# AZa+clJqO0I3fBZ4OZOTlJux3LJtQW1nzclvkD1/RXLBGyPWwlWEZuSzxWYG9vPW
+# S16toytCiiGS/qhvWiVwYoFzY16gu9jc10rTPa+DBjgSHSSHLeT8AtY+dwS8BDa1
+# 53fLnC6NIxi5o8JHHfBd1qFzVwVomqfJN2Udvuq82EKDQwWli6YJ/9GhlKZOqj0J
+# 9QVst9JkWtgqIsJLnfE5XkzeSD2bNJaaCV+O/fexUpHOP4n2HKG1qXUfcb9bQ11l
+# PVCBbqvw0NP8srMftpmWJvQ8eYtcZMzN7iea5aDADHKHwW5NWtMe6vBE5jJvHOsX
+# TpTDeGUgOw9Bqh/poUGd/rG4oGUqNODeqPk85sEwu8CgYyz8XBYAqNDEf+oRnR4G
+# xqZtMl20OAkrSQeq/eww2vGnL8+3/frQo4TZJ577AWZ3uVYQ4SBuxq6x+ba6yDVd
+# M3aO8XwgDCp3rrWiAoa6Ke60WgCxjKvj+QrJVF3UuWp0nr1Irpgwggb2MIIE3qAD
+# AgECAhEAkDl/mtJKOhPyvZFfCDipQzANBgkqhkiG9w0BAQwFADB9MQswCQYDVQQG
+# EwJHQjEbMBkGA1UECBMSR3JlYXRlciBNYW5jaGVzdGVyMRAwDgYDVQQHEwdTYWxm
+# b3JkMRgwFgYDVQQKEw9TZWN0aWdvIExpbWl0ZWQxJTAjBgNVBAMTHFNlY3RpZ28g
+# UlNBIFRpbWUgU3RhbXBpbmcgQ0EwHhcNMjIwNTExMDAwMDAwWhcNMzMwODEwMjM1
+# OTU5WjBqMQswCQYDVQQGEwJHQjETMBEGA1UECBMKTWFuY2hlc3RlcjEYMBYGA1UE
+# ChMPU2VjdGlnbyBMaW1pdGVkMSwwKgYDVQQDDCNTZWN0aWdvIFJTQSBUaW1lIFN0
+# YW1waW5nIFNpZ25lciAjMzCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIB
+# AJCycT954dS5ihfMw5fCkJRy7Vo6bwFDf3NaKJ8kfKA1QAb6lK8KoYO2E+RLFQZe
+# aoogNHF7uyWtP1sKpB8vbH0uYVHQjFk3PqZd8R5dgLbYH2DjzRJqiB/G/hjLk0NW
+# esfOA9YAZChWIrFLGdLwlslEHzldnLCW7VpJjX5y5ENrf8mgP2xKrdUAT70KuIPF
+# vZgsB3YBcEXew/BCaer/JswDRB8WKOFqdLacRfq2Os6U0R+9jGWq/fzDPOgNnDhm
+# 1fx9HptZjJFaQldVUBYNS3Ry7qAqMfwmAjT5ZBtZ/eM61Oi4QSl0AT8N4BN3KxE8
+# +z3N0Ofhl1tV9yoDbdXNYtrOnB786nB95n1LaM5aKWHToFwls6UnaKNY/fUta8pf
+# ZMdrKAzarHhB3pLvD8Xsq98tbxpUUWwzs41ZYOff6Bcio3lBYs/8e/OS2q7gPE8P
+# Wsxu3x+8Iq+3OBCaNKcL//4dXqTz7hY4Kz+sdpRBnWQd+oD9AOH++DrUw167aU1y
+# meXxMi1R+mGtTeomjm38qUiYPvJGDWmxt270BdtBBcYYwFDk+K3+rGNhR5G8RrVG
+# U2zF9OGGJ5OEOWx14B0MelmLLsv0ZCxCR/RUWIU35cdpp9Ili5a/xq3gvbE39x/f
+# Qnuq6xzp6z1a3fjSkNVJmjodgxpXfxwBws4cfcz7lhXFAgMBAAGjggGCMIIBfjAf
+# BgNVHSMEGDAWgBQaofhhGSAPw0F3RSiO0TVfBhIEVTAdBgNVHQ4EFgQUJS5oPGua
+# KyQUqR+i3yY6zxSm8eAwDgYDVR0PAQH/BAQDAgbAMAwGA1UdEwEB/wQCMAAwFgYD
+# VR0lAQH/BAwwCgYIKwYBBQUHAwgwSgYDVR0gBEMwQTA1BgwrBgEEAbIxAQIBAwgw
+# JTAjBggrBgEFBQcCARYXaHR0cHM6Ly9zZWN0aWdvLmNvbS9DUFMwCAYGZ4EMAQQC
+# MEQGA1UdHwQ9MDswOaA3oDWGM2h0dHA6Ly9jcmwuc2VjdGlnby5jb20vU2VjdGln
+# b1JTQVRpbWVTdGFtcGluZ0NBLmNybDB0BggrBgEFBQcBAQRoMGYwPwYIKwYBBQUH
+# MAKGM2h0dHA6Ly9jcnQuc2VjdGlnby5jb20vU2VjdGlnb1JTQVRpbWVTdGFtcGlu
+# Z0NBLmNydDAjBggrBgEFBQcwAYYXaHR0cDovL29jc3Auc2VjdGlnby5jb20wDQYJ
+# KoZIhvcNAQEMBQADggIBAHPa7Whyy8K5QKExu7QDoy0UeyTntFsVfajp/a3Rkg18
+# PTagadnzmjDarGnWdFckP34PPNn1w3klbCbojWiTzvF3iTl/qAQF2jTDFOqfCFSr
+# /8R+lmwr05TrtGzgRU0ssvc7O1q1wfvXiXVtmHJy9vcHKPPTstDrGb4VLHjvzUWg
+# AOT4BHa7V8WQvndUkHSeC09NxKoTj5evATUry5sReOny+YkEPE7jghJi67REDHVB
+# wg80uIidyCLxE2rbGC9ueK3EBbTohAiTB/l9g/5omDTkd+WxzoyUbNsDbSgFR36b
+# LvBk+9ukAzEQfBr7PBmA0QtwuVVfR745ZM632iNUMuNGsjLY0imGyRVdgJWvAvu0
+# 0S6dOHw14A8c7RtHSJwialWC2fK6CGUD5fEp80iKCQFMpnnyorYamZTrlyjhvn0b
+# oXztVoCm9CIzkOSEU/wq+sCnl6jqtY16zuTgS6Ezqwt2oNVpFreOZr9f+h/EqH+n
+# oUgUkQ2C/L1Nme3J5mw2/ndDmbhpLXxhL+2jsEn+W75pJJH/k/xXaZJL2QU/bYZy
+# 06LQwGTSOkLBGgP70O2aIbg/r6ayUVTVTMXKHxKNV8Y57Vz/7J8mdq1kZmfoqjDg
+# 0q23fbFqQSduA4qjdOCKCYJuv+P2t7yeCykYaIGhnD9uFllLFAkJmuauv2AV3Yb1
+# MYIGDzCCBgsCAQEwgYwweDELMAkGA1UEBhMCVVMxDjAMBgNVBAgMBVRleGFzMRAw
+# DgYDVQQHDAdIb3VzdG9uMREwDwYDVQQKDAhTU0wgQ29ycDE0MDIGA1UEAwwrU1NM
+# LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
+# snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
+# gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCBSP7m99fHxc2QBpmz6Murp
+# 7u/3wNhkrVrxFoFhJ2IPhzANBgkqhkiG9w0BAQEFAASCAYCi0LGl8Z0JWrfrOrpM
+# gpUewBLpNFbo3q5D97vFcvapxgWEBo4fVDHmY1WzPgRQMn0CalULZpA4lxEyoiyC
+# k1rpnArJ+pQGr3UJDcPN07d2AtjbUWyeM12m2WnFZqgQ6JqunzNx9mu2pee+F2KX
+# zZXVDpzfaRaKq3LtF+f4km6vnW3dqyhJ+2e+ihCRWigcYFN4VKC1v7aRCeEM2D8C
+# mjY+/Mn+4CRwJ033gFfix7Ml9EGgm9to70KbkOv89vMrvvpY2/9IFCYWlYyIyY9r
+# 8F/K+vGp+PZFp4O6SykStugAbCnvDJC3IPXE4PcPIwKRNLzXCxL8DstTYh9p9iZD
+# p6i3Jlta+u9H5r3DZJ5v3IMsTHQgHbkg/F3VUYWUAaV7rn/uQp3oJB4+6plHwur8
+# 830tm+6ZyQG1mdrXHIkWdsOW6IX7IRqz89GmnP815CAWT/wxl+dU5aomxGRH3Tva
+# 8NJ8JKrNct+646q3ZZYGYJTsRJocV+bAzzIbQ3WBbxBiy3qhggNMMIIDSAYJKoZI
+# hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
+# ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
+# dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
+# IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxMzIxMjUzMVow
+# PwYJKoZIhvcNAQkEMTIEMCIJGnLZUQKAWDXSVW6rFRirgx4s/WCjlLzPyVztGx9I
+# fyvSMccQ/qKtW9RVGcEBSDANBgkqhkiG9w0BAQEFAASCAgAxQamiyjFc1nm5RGAe
+# 0v7uQUqOffPNmeNAJSGmVZjos8V535i/PAEdWpoBKoVxpwKLh1yVd4CX2TDfDgKx
+# 0Vinb7TFVNjO+0uMSCYR2M1oXgrEBr5FOreA6NYNUW9y+12E+SrHxVYZ4nNj39cE
+# T1PETDRFEgUyJc1KtV3wMX61mFA+KFTsA4uJuNCdCaYykuujOcl4QkIaNzrXkZsb
+# Ks1w3Zvd8ChiMaAdCo55z1BtRHzyySN6CTyzyPg2EsrLfVYjr2TEXO9zFzgCaBXK
+# zd9Qk8PRRrKjABrI6dOrk0DXfZDkadfn7RBa3tqSj96FVghjFj1derxGPIRR6PDM
+# +rYr2mfmCJ3RrkomOfVBGOntFta43jRITrL+uQRi9CkmLfRKJ+WRO1p/z6ixco4d
+# 0xn8ZOe0eq7kp96EQESy1TbRGKf9NetZ32IhqJOhG9a9SoQpUWaJYkQS1cC1GERk
+# xOuL9pUcPwDWCD6mBPQIZ6V+FmCsO+gTc5XWmtGpgoUNlAO0oJLcCIypvpUllp7X
+# LOcIGEoxfFyaDVSB7rNfbUnAVjcGN5y9X1FItT6IsokS41HGj+de0wmSaVrCOBRC
+# 3p5nCPj3tYNEv4anWJY/BhwCNI2pjJIvv5lfVtICEwaPibALpBTTFvya75L4Onpe
+# xffBj7Jh/C65Ycp7utV15r3p9Q==
 # SIG # End signature block

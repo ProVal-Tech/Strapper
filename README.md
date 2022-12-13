@@ -29,7 +29,7 @@ git clone "https://github.com/ProVal-Tech/Strapper" (Join-Path ($env:PSModulePat
 
 ## Usage
 
-Strapper is primarily intended for use inside of another script, but it will work perfectly well on the console. Check out the [public](./Strapper/public) folder for more information about the available functions.
+Strapper is primarily intended for use inside of another script, but it will work perfectly well on the console. Check out the [Functions.md](./Functions.md) document for more information about the available functions.
 
 ```powershell
 # Import Strapper
