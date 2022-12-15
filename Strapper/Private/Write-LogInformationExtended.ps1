@@ -1,52 +1,26 @@
-$StrapperSession = [pscustomobject]@{
-    LogPath = $null
-    DataPath = $null
-    ErrorPath = $null
-    WorkingPath = $null
-    ScriptTitle = $null
-    IsLoaded = $true
-    IsElevated = $false
-    Platform = [System.Environment]::OSVersion.Platform
-}
+function Write-InformationExtended {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)][Object]$MessageData,
+        [System.ConsoleColor]$ForegroundColor = $Host.UI.RawUI.ForegroundColor,
+        [System.ConsoleColor]$BackgroundColor = $Host.UI.RawUI.BackgroundColor,
+        [switch]$NoNewLine
+    )
 
-if ($MyInvocation.PSCommandPath) {
-    $scriptObject = Get-Item -Path $MyInvocation.PSCommandPath
-    $StrapperSession.WorkingPath = $($scriptObject.DirectoryName)
-    $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-log.txt"
-    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-data.txt"
-    $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-error.txt"
-    $StrapperSession.ScriptTitle = $scriptObject.BaseName
-} else {
-    $StrapperSession.WorkingPath = (Get-Location).Path
-    $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-log.txt"
-    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-data.txt"
-    $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-error.txt"
-    $StrapperSession.ScriptTitle = '***Manual Run***'
-}
-
-if ($StrapperSession.Platform -eq 'Win32NT') {
-    $StrapperSession.IsElevated = (New-Object -TypeName Security.Principal.WindowsPrincipal -ArgumentList ([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
-} else {
-    $StrapperSession.IsElevated = $(id -u) -eq 0
-}
-
-$publicFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" -Recurse )
-$privateFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1" -Recurse )
-foreach ($scriptImport in @($publicFunctions + $privateFunctions)) {
-    try {
-        . $scriptImport.FullName
-    } catch {
-        Write-Error -Message "Failed to import $($scriptImport.FullName)"
+    $message = [System.Management.Automation.HostInformationMessage]@{
+        Message = $MessageData
+        ForegroundColor = $ForegroundColor
+        BackgroundColor = $BackgroundColor
+        NoNewLine = $NoNewLine.IsPresent
     }
+
+    Write-Information -MessageData $message
 }
-
-Export-ModuleMember -Variable StrapperSession
-
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB7W5vEagpor/PY
-# /nd83a2fW7B5M7bLFWGqTmmsdUTGAKCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDBjpvitJCrACU4
+# PFLiBa/1qdKe3vNtanyzHbg8k/aQbKCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -226,32 +200,32 @@ Export-ModuleMember -Variable StrapperSession
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCD6vEFgtP8OzTVOf9zxUfAW
-# x3klWciXT+4F15VusT/K1TANBgkqhkiG9w0BAQEFAASCAYA0KNFugynWp+IxKKWq
-# 2fhoWW2AorBTvyqc3RKXu11Sq7PjrMeJJOuMdv97w/tArDagPSB4UGGtDjgFHbDS
-# Sh7hdIfgZnWt77AENy1CaKJtvWOrkeRIRHAgYevh76DlovXaPoX47z48ok3MSoJE
-# RrB50ytQ34onPNtlGXl0fL53mJ6fHK2ypYvEgiuv6ebiMFwnqeWbJd6CTusmpwWQ
-# QWX6BNxR7DE1IY2q2FKYN4W+Q5gve4Ag2S2HEGiFSWlBaVk6aSehsq88xmt8xr0q
-# PtMxfVUtyj8+tbfnzGvnjzkMjcZO4eRJ0IGt02Qkjd6pr3FyeSm5/Ew2bnlsQSk+
-# eR28hJQqoA6/+XdXktN91sMkTeU29M4SNVIdVhhB/hsnoD5N6XXFBTRZm2zuoPzC
-# ptccb4gJmRJl0K0KjUWfQ4PpOoWD7x/26LFZFMjYeXRuncWJ1GRE5hNda02T1vAS
-# FaKWaxneLyx6ryBYBzGLn/tHMuuDLDWllc6Adfo9dLpw+A+hggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCAlorvHXZ2wk4Ga7eZq6RBL
+# irR9mErHtqXWr9duUC0KkzANBgkqhkiG9w0BAQEFAASCAYCQ8q7PrefVXMZtIlbr
+# jta2o7jcqDymSMIQh4U/iRZht7HovTixOeju/3hvmuQP++sNdmYABvbX808POf2g
+# BjxlVwNQwLlgqpJLUpU7FVeQQM6h/IQgAauDcEHT/9RtL9st0QTi4r2lZX5ZBXcP
+# +9UyIPpER2+xcbn00xYXB4KtrESmdn0xlk1Bwu9jcRpHlPcskCGKvZKeCzwdNbZD
+# drEQ1HTD/grR2jnZwrVEmybtM4YqwYOF8lOCGsDG8jVE1eaBGXMYXlfkCLoixjFb
+# GJLmbp9oaFNX1wxtoSaUm/ZUvBn1MDf3mcOwLB0Nq0uBcqCAJRDrHw7ZA+jA1iz2
+# ddIjsdX6rbAwNnfBHPmpQREPBGUCECiCHcvzOmmyCfVIFtaPHWGDrv1S+nvxmEu+
+# UREG5CUZJcrHiki7l6+NBXE8aZPgRpDjlKnYSo8/9HWQsidWlxyy/WkHfDljWGIV
+# RPPiCgyTzXN04fcPVkVM47jdSsD3vTY7ZEV4hs+aIZbAoTOhggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTgwM1ow
-# PwYJKoZIhvcNAQkEMTIEMHcRy7QMN/iSCrc5nPKV4AuYvxB4cwwFc+nuwhzOw6gJ
-# omEx4+br/WPUEUtkY5VvbTANBgkqhkiG9w0BAQEFAASCAgCP7sQOK5NpwPex0SoO
-# U9+kN+ohg0hKY6escKFQmRKIxRB6QwW2aYRqPSDdYSXuWrTPEDYo2HQY8Qd3oFkr
-# NAWWPEaBY5U/P8n/uglelFXf2+RnJt4K5yPmcL2IRvnGnbfZtXknEZtfNsoIkcFw
-# xKn1J2/7HO9Jd2SPx/PTuRQCKbtC8nuwr/TL1imtwFeV6FmMAofdz002CZJj5gLm
-# IHUHWmoYxUiKfbkzeCwIrdZomCxeFgwF9u9YSKxN8VOqzoCn+iM7dBIYvOTSs0kK
-# CnN7GaPu/uoTEUTqn+3YReLL9WA2dFjpiKKi+ANcD4M4kd+xIv9fDt7oSVlY0bmb
-# q5aQsSNMRO6HDwatz79kvd2GooARAnmaJElrfEhcUEwdiFXHIM0Sisf3fAMCYJaP
-# Q6KCsytz+JzH45DWi0oxi127TzX+bJdTbVJ0/JcSGA6GMrXhSUj+6VvHKScJ65jA
-# HK2TkBienD+7yRUvxEPVJJMgwAbb6sbb/ZWK6pXf4A3GqRgUiJnBWTL0jsQWjA2k
-# b0NTIdOBVbXN/YWfeY0ruIFk5huAQd5Oy/3eZAM0TxqHPxpPHPBvoL7herOop7oB
-# 0K782Rtaxx7U16lLQmpU3jFq+mN3OTIyHJXGw64sTA2F3HiToneMp4WGKirT6dT9
-# aDrGm/L5YGtU+V0SV/YsvkRk7g==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTgxMlow
+# PwYJKoZIhvcNAQkEMTIEMCwVA3hUTopzYZZh0TopjHqo163Ai9GRZu7JDEfhwL4C
+# MST4IzyfLol1ukX0yU/AKDANBgkqhkiG9w0BAQEFAASCAgABrjxstLFeKN4JQC7o
+# Auv9u8CCCnDHAVVP8iiHZyfqD5kvgWE98bZPBYGUMsoU8rkg0GsGEk+YB+OQTqpM
+# c2BTBSmWkumpzp/E5xlPDPM5a6Ke2j4vWHORCil2YOVUtSg80uWGNdU4jvjYnJcg
+# KQCu6AVCScJo5XM4cdyZC8I60LIZKoajxzOiaTQ39XCSR8JSrCX4M9EChBZTwAmQ
+# DZj7qefIJNj9NxHAUS+CZNCBuD1RDdPYpeKmpnBE9ZNYfCObwy6Fy84XJgkEjObC
+# HMcCwGPoo8Si8ZL4S488pfN8yxOw6CbXL/l9suE7FetukFZg4SZDEQs44bze3X9x
+# raqscN/NGpeciH1xJc6f29VTFZXlnV9h5dmCsQ9yzudKCcNN/4POSTHU+WkHOg07
+# aGwW0qW+L1sALABsvWfVXDrPdcxxoidRDwQJ0e0aqB/APSe8a5N0/rEBWV6OyARn
+# bz4GUKGI64K7TZOby341t/ostMpW4JBQM9i//jbbPQpL43jcskyX5w7ENWtALrRx
+# ZqUyOviXkVkKkaXVjmcFNFiQwKjmq3V/cEs+PNj1BKHe/F1pl7zD8QoUGbNfWoP/
+# Y78haygVY9U5/R+C0la7gCI58151Bc1izMPSI3VeHiwaKdPR2ut337wtiB42PIaG
+# 869JTxV58HP3lHVyGwh9fVvUbA==
 # SIG # End signature block

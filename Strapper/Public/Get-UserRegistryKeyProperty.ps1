@@ -1,52 +1,84 @@
-$StrapperSession = [pscustomobject]@{
-    LogPath = $null
-    DataPath = $null
-    ErrorPath = $null
-    WorkingPath = $null
-    ScriptTitle = $null
-    IsLoaded = $true
-    IsElevated = $false
-    Platform = [System.Environment]::OSVersion.Platform
-}
+function Get-UserRegistryKeyProperty {
+    <#
+    .SYNOPSIS
+        Gets a list of existing user registry properties.
+    .EXAMPLE
+        Get-UserRegistryKeyProperty -Path "SOFTWARE\_automation\Prompter" -Name "Timestamp"
+        Gets the Prompter Timestamp property from each available user's registry hive.
+    .PARAMETER Path
+        The relative registry path to the target property.
+        Ex: To retrieve the property information for each user's Level property under the path HKEY_CURRENT_USER\SOFTWARE\7-Zip\Compression: pass "SOFTWARE\7-Zip\Compression"
+    .PARAMETER Name
+        The name of the property to target.
+        Ex: To retrieve the property information for each user's Level property under the path HKEY_CURRENT_USER\SOFTWARE\7-Zip\Compression: pass "Level"
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param (
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $false)][string]$Name = '(Default)'
+    )
 
-if ($MyInvocation.PSCommandPath) {
-    $scriptObject = Get-Item -Path $MyInvocation.PSCommandPath
-    $StrapperSession.WorkingPath = $($scriptObject.DirectoryName)
-    $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-log.txt"
-    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-data.txt"
-    $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-error.txt"
-    $StrapperSession.ScriptTitle = $scriptObject.BaseName
-} else {
-    $StrapperSession.WorkingPath = (Get-Location).Path
-    $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-log.txt"
-    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-data.txt"
-    $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-error.txt"
-    $StrapperSession.ScriptTitle = '***Manual Run***'
-}
-
-if ($StrapperSession.Platform -eq 'Win32NT') {
-    $StrapperSession.IsElevated = (New-Object -TypeName Security.Principal.WindowsPrincipal -ArgumentList ([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
-} else {
-    $StrapperSession.IsElevated = $(id -u) -eq 0
-}
-
-$publicFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" -Recurse )
-$privateFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1" -Recurse )
-foreach ($scriptImport in @($publicFunctions + $privateFunctions)) {
-    try {
-        . $scriptImport.FullName
-    } catch {
-        Write-Error -Message "Failed to import $($scriptImport.FullName)"
+    if($StrapperSession.Platform -ne 'Win32NT') {
+        Write-Error 'This function is only supported on Windows-based platforms.' -ErrorAction Stop
     }
+    
+    # Regex pattern for SIDs
+    $patternSID = '((S-1-5-21)|(S-1-12-1))-\d+-\d+\-\d+\-\d+$'
+
+    # Get Username, SID, and location of ntuser.dat for all users
+    $profileList = Get-RegistryHivePath
+
+    # Get all user SIDs found in HKEY_USERS (ntuser.dat files that are loaded)
+    $loadedHives = Get-ChildItem Registry::HKEY_USERS | Where-Object { $_.PSChildname -match $PatternSID } | Select-Object @{name = 'SID'; expression = { $_.PSChildName } }
+
+    # Get all user hives that are not currently logged in
+    if ($LoadedHives) {
+        $UnloadedHives = Compare-Object $ProfileList.SID $LoadedHives.SID | Select-Object @{name = 'SID'; expression = { $_.InputObject } }, UserHive, Username
+    } else {
+        $UnloadedHives = $ProfileList
+    }
+
+    $returnEntries = @(
+        foreach ($profile in $ProfileList) {
+            # Load user ntuser.dat if it's not already loaded
+            if ($profile.SID -in $UnloadedHives.SID) {
+                reg load HKU\$($profile.SID) $($profile.UserHive) | Out-Null
+            }
+
+            # Get the absolute path to the key for the currently iterated user.
+            $propertyPath = "Registry::HKEY_USERS\$($profile.SID)\$Path"
+
+            # Get the target registry entry
+            $returnEntry = $null
+            $returnEntry = Get-ItemProperty -Path $propertyPath -Name $Name -ErrorAction SilentlyContinue | Select-Object -ExpandProperty $Name
+
+            # If the get was successful, then pass back a custom object that describes the registry entry.
+            if ($returnEntry) {
+                [PSCustomObject]@{
+                    Username = $profile.Username
+                    SID = $profile.SID
+                    Path = $propertyPath
+                    Hive = $profile.UserHive
+                    Name = $Name
+                    Value = $returnEntry
+                }
+            }
+
+            # Collect garbage and close ntuser.dat if the hive was initially unloaded
+            if ($profile.SID -in $UnloadedHives.SID) {
+                [gc]::Collect()
+                reg unload HKU\$($profile.SID) | Out-Null
+            }
+        }
+    )
+    return $returnEntries
 }
-
-Export-ModuleMember -Variable StrapperSession
-
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB7W5vEagpor/PY
-# /nd83a2fW7B5M7bLFWGqTmmsdUTGAKCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCuo0d9TJ4TNO5Z
+# OHQ1sHzRB5Kv3b/W9O0VoyLQY4aUvKCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -226,32 +258,32 @@ Export-ModuleMember -Variable StrapperSession
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCD6vEFgtP8OzTVOf9zxUfAW
-# x3klWciXT+4F15VusT/K1TANBgkqhkiG9w0BAQEFAASCAYA0KNFugynWp+IxKKWq
-# 2fhoWW2AorBTvyqc3RKXu11Sq7PjrMeJJOuMdv97w/tArDagPSB4UGGtDjgFHbDS
-# Sh7hdIfgZnWt77AENy1CaKJtvWOrkeRIRHAgYevh76DlovXaPoX47z48ok3MSoJE
-# RrB50ytQ34onPNtlGXl0fL53mJ6fHK2ypYvEgiuv6ebiMFwnqeWbJd6CTusmpwWQ
-# QWX6BNxR7DE1IY2q2FKYN4W+Q5gve4Ag2S2HEGiFSWlBaVk6aSehsq88xmt8xr0q
-# PtMxfVUtyj8+tbfnzGvnjzkMjcZO4eRJ0IGt02Qkjd6pr3FyeSm5/Ew2bnlsQSk+
-# eR28hJQqoA6/+XdXktN91sMkTeU29M4SNVIdVhhB/hsnoD5N6XXFBTRZm2zuoPzC
-# ptccb4gJmRJl0K0KjUWfQ4PpOoWD7x/26LFZFMjYeXRuncWJ1GRE5hNda02T1vAS
-# FaKWaxneLyx6ryBYBzGLn/tHMuuDLDWllc6Adfo9dLpw+A+hggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCC+iXxYDtZsm63VSWi4Z9Xd
+# PnQjvHXmpGd3LzxfsgWTpTANBgkqhkiG9w0BAQEFAASCAYADiwRrM83V5mdmKwk6
+# aU8V6DCjeYoVgYHolr6mAzsdvYchta46CoRyVVBOzKuttjnZmgZ/6F1zD4PGgN1z
+# 9dAD+YrO+vgam/U+oKXvSN0gjaPW9arGm7UMwzVzVNsRtOAR41md8PrA2U6qY9Yl
+# m19CHveJ8yJSymfLbtwT8A1Sj0UqeaMDUtd/7KOS4NS3H8TUK6tDPQdmp2rSyCNX
+# jyZ3inxzIuLamzHViJAJFjAvXhZNaoUx/85RsPKXvSnsHma4AMdvZf5KT4fWIIqA
+# gDjQ8Bg3ub5A9LZIusxXLq94d8jbLD47ONzrYs0672ph8Q4TUq0XPdw7eAwXi8Qw
+# 8A1NMzPOr/M1zZysRE0NxHNcUKtlAoicdJ4QsZQgwq39XJayXDPFl7PWhiSSz5zW
+# i/BPX7zv0o4w9a8RWRo/Rl18cmV1TfCjYqIVGM0DcYZs6pWTixlSBryda21dGOb7
+# Tz3l/dinsA91EBN0bwip77snxGnGZc1Jy75DXZbG/VkKdLehggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTgwM1ow
-# PwYJKoZIhvcNAQkEMTIEMHcRy7QMN/iSCrc5nPKV4AuYvxB4cwwFc+nuwhzOw6gJ
-# omEx4+br/WPUEUtkY5VvbTANBgkqhkiG9w0BAQEFAASCAgCP7sQOK5NpwPex0SoO
-# U9+kN+ohg0hKY6escKFQmRKIxRB6QwW2aYRqPSDdYSXuWrTPEDYo2HQY8Qd3oFkr
-# NAWWPEaBY5U/P8n/uglelFXf2+RnJt4K5yPmcL2IRvnGnbfZtXknEZtfNsoIkcFw
-# xKn1J2/7HO9Jd2SPx/PTuRQCKbtC8nuwr/TL1imtwFeV6FmMAofdz002CZJj5gLm
-# IHUHWmoYxUiKfbkzeCwIrdZomCxeFgwF9u9YSKxN8VOqzoCn+iM7dBIYvOTSs0kK
-# CnN7GaPu/uoTEUTqn+3YReLL9WA2dFjpiKKi+ANcD4M4kd+xIv9fDt7oSVlY0bmb
-# q5aQsSNMRO6HDwatz79kvd2GooARAnmaJElrfEhcUEwdiFXHIM0Sisf3fAMCYJaP
-# Q6KCsytz+JzH45DWi0oxi127TzX+bJdTbVJ0/JcSGA6GMrXhSUj+6VvHKScJ65jA
-# HK2TkBienD+7yRUvxEPVJJMgwAbb6sbb/ZWK6pXf4A3GqRgUiJnBWTL0jsQWjA2k
-# b0NTIdOBVbXN/YWfeY0ruIFk5huAQd5Oy/3eZAM0TxqHPxpPHPBvoL7herOop7oB
-# 0K782Rtaxx7U16lLQmpU3jFq+mN3OTIyHJXGw64sTA2F3HiToneMp4WGKirT6dT9
-# aDrGm/L5YGtU+V0SV/YsvkRk7g==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTgyMVow
+# PwYJKoZIhvcNAQkEMTIEMFJy6PLeOKL5m1uBHxU186OUNJUNcQrAM3Gs296Chvzs
+# 6kmqI5XLdwCc2afH+cOckjANBgkqhkiG9w0BAQEFAASCAgCOPCQkH2FBKLzvpfab
+# rkLGBOnIaJjwA9s8symbDDXaF+J/xkvZKbQcQA1bLJTaj2xMXNjEA7qwfdm3wIm2
+# v2AIlML+k2NMpTrjuY2RPzTkK1DoTwKMYPRAdvtjJ93P5saSqZtJUt2fCwGYwsxU
+# SugXE7vN8+baSF91SR6JVSmCuyOPzweVOVnm7WkVwSyX1EsD8SZI9wJfiY+7oGv4
+# ZXkNgPbjXkxQl2f8O8Ehim8AsQuauScMuuiZLKjbJIIm/DqXKjuML1R8/K8kTyJj
+# jnO9PPDVY5tiDdaPt6lbMFVltWEvKXr+NCdjle7ULBofQOXQnQcPjneRHOg+AHAD
+# tUVIVqkoHXeAyhaav4BVhdGvUYqNlt3hriTEy2p+mXWJqIFe4Y3E7SU4g7mpRfSL
+# qsULWfW1/bd8Bo7z4hcZzoXiUdUB0UyCI5+z2wEpbgGPWnHXNv+kDZzRxEroeI0w
+# A/WDnoPN/XEigiz20Nzc/hAauF/cT/JNQ80BQXncc1xF9JFnQj1v6zZaV9yRJrDo
+# A1w39vKQoGUz4kX8PyjzQ/B+hcUHPhDBv+siea8NadX9kROwiFGtCXh02cECWUny
+# 8AzERyjrCTVxS73KvHl85Jyl+RnjkHatjdeExeDE050GyC/1wfb0a+aU1AdJcDfy
+# 9Zh51dNRJZzZFeEpIhk/iuGSbA==
 # SIG # End signature block

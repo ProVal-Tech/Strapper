@@ -1,52 +1,119 @@
-$StrapperSession = [pscustomobject]@{
-    LogPath = $null
-    DataPath = $null
-    ErrorPath = $null
-    WorkingPath = $null
-    ScriptTitle = $null
-    IsLoaded = $true
-    IsElevated = $false
-    Platform = [System.Environment]::OSVersion.Platform
-}
+function Set-UserRegistryKeyProperty {
+    <#
+    .SYNOPSIS
+        Creates or updates a registry property value for existing user registry hives.
+    .EXAMPLE
+        Set-UserRegistryKeyProperty -Path "SOFTWARE\_automation\Prompter" -Name "Timestamp" -Value 1
+        Creates or updates a Dword registry property property for each available user's registry hive to a value of 1.
+    .EXAMPLE
+        Set-UserRegistryKeyProperty -Path "SOFTWARE\_automation\Strings\New\Path" -Name "MyString" -Value "1234" -Force
+        Creates or updates a String registry property based on value type inference with the name MyString and the value of "1234". Creates the descending key path if it does not exist.
+    .PARAMETER Path
+        The relative registry path to the target property.
+    .PARAMETER Name
+        The name of the property to target.
+    .PARAMETER Value
+        The value to set on the target property.
+    .PARAMETER Type
+        The type of value to set. If not passed, this will be inferred from the object type of the Value parameter.
+    .PARAMETER ExcludeDefault
+        Exclude the Default user template from having the registry keys set.
+    .PARAMETER Force
+        Will create the registry key path to the property if it does not exist.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
 
-if ($MyInvocation.PSCommandPath) {
-    $scriptObject = Get-Item -Path $MyInvocation.PSCommandPath
-    $StrapperSession.WorkingPath = $($scriptObject.DirectoryName)
-    $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-log.txt"
-    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-data.txt"
-    $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-error.txt"
-    $StrapperSession.ScriptTitle = $scriptObject.BaseName
-} else {
-    $StrapperSession.WorkingPath = (Get-Location).Path
-    $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-log.txt"
-    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-data.txt"
-    $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-error.txt"
-    $StrapperSession.ScriptTitle = '***Manual Run***'
-}
+        [Parameter(Mandatory = $false)]
+        [string]$Name = '(Default)',
 
-if ($StrapperSession.Platform -eq 'Win32NT') {
-    $StrapperSession.IsElevated = (New-Object -TypeName Security.Principal.WindowsPrincipal -ArgumentList ([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
-} else {
-    $StrapperSession.IsElevated = $(id -u) -eq 0
-}
+        [Parameter(Mandatory = $true)]
+        [object]$Value,
 
-$publicFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" -Recurse )
-$privateFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1" -Recurse )
-foreach ($scriptImport in @($publicFunctions + $privateFunctions)) {
-    try {
-        . $scriptImport.FullName
-    } catch {
-        Write-Error -Message "Failed to import $($scriptImport.FullName)"
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('Unknown', 'String', 'ExpandString', 'Binary', 'DWord', 'MultiString', 'QWord', 'None')]
+        [Microsoft.Win32.RegistryValueKind]$Type,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$ExcludeDefault,
+
+        [Parameter(Mandatory = $false)]
+        [switch]$Force
+    )
+
+    if($StrapperSession.Platform -ne 'Win32NT') {
+        Write-Error 'This function is only supported on Windows-based platforms.' -ErrorAction Stop
     }
+    
+    # Regex pattern for SIDs
+    $patternSID = '((S-1-5-21)|(S-1-12-1))-\d+-\d+\-\d+\-\d+$'
+
+    # Get Username, SID, and location of ntuser.dat for all users
+    $profileList = Get-RegistryHivePath -ExcludeDefault:$ExcludeDefault
+
+    # Get all user SIDs found in HKEY_USERS (ntuser.dat files that are loaded)
+    $loadedHives = Get-ChildItem Registry::HKEY_USERS | Where-Object { $_.PSChildname -match $PatternSID } | Select-Object @{name = 'SID'; expression = { $_.PSChildName } }
+
+    # Get all user hives that are not currently logged in
+    if ($LoadedHives) {
+        $UnloadedHives = Compare-Object $ProfileList.SID $LoadedHives.SID | Select-Object @{name = 'SID'; expression = { $_.InputObject } }, UserHive, Username
+    } else {
+        $UnloadedHives = $ProfileList
+    }
+
+    # Iterate through each profile on the machine
+    $returnEntries = @(
+        foreach ($profile in $ProfileList) {
+            # Load User ntuser.dat if it's not already loaded
+            if ($profile.SID -in $UnloadedHives.SID) {
+                reg load HKU\$($profile.SID) $($profile.UserHive) | Out-Null
+            }
+
+            $propertyPath = "Registry::HKEY_USERS\$($profile.SID)\$Path"
+
+            # Set the parameters to pass to Set-RegistryKeyProperty
+            $parameters = @{
+                Path = $propertyPath
+                Name = $Name
+                Value = $Value
+                Force = $Force
+            }
+            if ($Type) { $parameters.Add('Type', $Type) }
+
+            # Set the target registry entry
+            $returnEntry = Set-RegistryKeyProperty @parameters | Select-Object -ExpandProperty $Name
+
+            # If the set was successful, then pass back the return entry from Set-RegistryKeyProperty
+            if ($returnEntry) {
+                [PSCustomObject]@{
+                    Username = $profile.Username
+                    SID = $profile.SID
+                    Path = $propertyPath
+                    Hive = $profile.UserHive
+                    Name = $Name
+                    Value = $returnEntry
+                }
+            } else {
+                Write-Log -Text "Failed to set the requested registry entry for user '$($profile.Username)'" -Type WARN
+            }
+
+            # Collect garbage and close ntuser.dat if the hive was initially unloaded
+            if ($profile.SID -in $UnloadedHives.SID) {
+                [gc]::Collect()
+                reg unload HKU\$($profile.SID) | Out-Null
+            }
+        }
+    )
+    Write-Log -Text "$($returnEntries.Count) user registry entries successfully updated."
+    return $returnEntries
 }
-
-Export-ModuleMember -Variable StrapperSession
-
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB7W5vEagpor/PY
-# /nd83a2fW7B5M7bLFWGqTmmsdUTGAKCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCodJp0SNsgKjuN
+# RR+8RKB8fdfaZ0p8PZ+EPkzDhS0UbaCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -226,32 +293,32 @@ Export-ModuleMember -Variable StrapperSession
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCD6vEFgtP8OzTVOf9zxUfAW
-# x3klWciXT+4F15VusT/K1TANBgkqhkiG9w0BAQEFAASCAYA0KNFugynWp+IxKKWq
-# 2fhoWW2AorBTvyqc3RKXu11Sq7PjrMeJJOuMdv97w/tArDagPSB4UGGtDjgFHbDS
-# Sh7hdIfgZnWt77AENy1CaKJtvWOrkeRIRHAgYevh76DlovXaPoX47z48ok3MSoJE
-# RrB50ytQ34onPNtlGXl0fL53mJ6fHK2ypYvEgiuv6ebiMFwnqeWbJd6CTusmpwWQ
-# QWX6BNxR7DE1IY2q2FKYN4W+Q5gve4Ag2S2HEGiFSWlBaVk6aSehsq88xmt8xr0q
-# PtMxfVUtyj8+tbfnzGvnjzkMjcZO4eRJ0IGt02Qkjd6pr3FyeSm5/Ew2bnlsQSk+
-# eR28hJQqoA6/+XdXktN91sMkTeU29M4SNVIdVhhB/hsnoD5N6XXFBTRZm2zuoPzC
-# ptccb4gJmRJl0K0KjUWfQ4PpOoWD7x/26LFZFMjYeXRuncWJ1GRE5hNda02T1vAS
-# FaKWaxneLyx6ryBYBzGLn/tHMuuDLDWllc6Adfo9dLpw+A+hggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCBi6gIGidlyrCwrkz9m1Y5k
+# 9ZgKzY4uZ/CvriuCmJQgPjANBgkqhkiG9w0BAQEFAASCAYAi7rBP1hIBDBUkGaTc
+# NEafMope8YxCWslgz+oYh5uBGC7P9rl0JDDYvfwpxa1UX8RCnSPuxXwMwrI/H7Hb
+# bp0exZBKnlegw11JCbphC/b2Qby579kxI5gmPCuUEdcr0AtUHZOHgSYj3n91Fri+
+# Vk06W0xlieKA00AbI6sc2V7lM9yX3LgHDx8ipm9sJoBJKKCcGMKTA7Ix2je4XJ7q
+# 4DrhPAzmGh5+/zw6uYPQgxQlk3I6o4YP9H1M443SK540Vig5H/QqdRUruvRrtdQ/
+# qdCvq7NC4v8ITNNWtiSUTKG3L/AkKjR2ldf4Je8SNlMXZ7hEEcrHeJF+T6Kg7j3i
+# cuNIMxhrieniLaf0Zpwd6M/4ZszGl6zAU2rF2alMMvSBk9Wpy/TbVaAJ7FNb8zHB
+# dW0K0redq6AhTTWtnd8xLOxSB76qEwHKbh/BTcxdMA2zsooqdv+47wv9NZgSrW/h
+# nhwFbzN62XfwrLrGuVrdqKE7r35yq7Jkg1He8vxMb0yVL6qhggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTgwM1ow
-# PwYJKoZIhvcNAQkEMTIEMHcRy7QMN/iSCrc5nPKV4AuYvxB4cwwFc+nuwhzOw6gJ
-# omEx4+br/WPUEUtkY5VvbTANBgkqhkiG9w0BAQEFAASCAgCP7sQOK5NpwPex0SoO
-# U9+kN+ohg0hKY6escKFQmRKIxRB6QwW2aYRqPSDdYSXuWrTPEDYo2HQY8Qd3oFkr
-# NAWWPEaBY5U/P8n/uglelFXf2+RnJt4K5yPmcL2IRvnGnbfZtXknEZtfNsoIkcFw
-# xKn1J2/7HO9Jd2SPx/PTuRQCKbtC8nuwr/TL1imtwFeV6FmMAofdz002CZJj5gLm
-# IHUHWmoYxUiKfbkzeCwIrdZomCxeFgwF9u9YSKxN8VOqzoCn+iM7dBIYvOTSs0kK
-# CnN7GaPu/uoTEUTqn+3YReLL9WA2dFjpiKKi+ANcD4M4kd+xIv9fDt7oSVlY0bmb
-# q5aQsSNMRO6HDwatz79kvd2GooARAnmaJElrfEhcUEwdiFXHIM0Sisf3fAMCYJaP
-# Q6KCsytz+JzH45DWi0oxi127TzX+bJdTbVJ0/JcSGA6GMrXhSUj+6VvHKScJ65jA
-# HK2TkBienD+7yRUvxEPVJJMgwAbb6sbb/ZWK6pXf4A3GqRgUiJnBWTL0jsQWjA2k
-# b0NTIdOBVbXN/YWfeY0ruIFk5huAQd5Oy/3eZAM0TxqHPxpPHPBvoL7herOop7oB
-# 0K782Rtaxx7U16lLQmpU3jFq+mN3OTIyHJXGw64sTA2F3HiToneMp4WGKirT6dT9
-# aDrGm/L5YGtU+V0SV/YsvkRk7g==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTg0Mlow
+# PwYJKoZIhvcNAQkEMTIEMM1wat4Y92/8ds3S/0o27YVf/DGA1TewB6+gPIoiz2/F
+# FlNwM/jNYvgbBWGAhkH+qTANBgkqhkiG9w0BAQEFAASCAgBTaH0pr3VWwoRw8Zsm
+# znEMStQqJdab4WrCjvX47Djb+r2WRFW9yAJ8Fvvg8YTaimf03wOCvsvb7XF548qh
+# 0+WRd6uEPbNyTm1uO+WsYhXPrdmkXmkZH4CT5wOc/ZoJ4CDfdbyY02FqjFuKCbIa
+# u+j+fAZVO2c3VRD5py6HRdGO2JSQGBjZd3oHkbzRmWUCsUgMqx1hZXPh2gOTQaUp
+# rXrDvilGLeXWzZNcI/DJytsq+6kIxru8cu2GtCsY5Mqqtx/qT1Ul4OxY+nBIBZP8
+# 3HBbLjC9UGByxPu085tFYslPtrvuQgaMf/9QBlLjQePGdcgtX+URjaIQPeu//p7F
+# 2Dsp43LqxcoHvK6lcEod7TBiYyE51/ktmtNreNUgjGQBTeF4vXxgJGrmSoKwXknx
+# 8Lhqimbc2MjhzXL2jfV4A6TEov8c5NUt9CiFyCizi54J2P2VoFip82XRvu8c3QXI
+# iduOezb2wyHQd15oFNCE9nnSZ4+TlRaYkJofySYaN/3mLvFdYvU2GNS55hSZKusY
+# MPyVdkxj4H+HK7ZMw1sQ4BN1V6TB2G+GS9erDyvIdjeODHPY5B7vcaE/+a+Dtq5E
+# jdx6CTHA/2D3lCKnzI/aZOltuMBM1X/ibVwd6IQgq6c107wCTBh/net8L6ClxwKI
+# r8CH77faimHgNdOhDJnDS959FQ==
 # SIG # End signature block

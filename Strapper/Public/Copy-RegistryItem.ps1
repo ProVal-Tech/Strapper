@@ -1,52 +1,78 @@
-$StrapperSession = [pscustomobject]@{
-    LogPath = $null
-    DataPath = $null
-    ErrorPath = $null
-    WorkingPath = $null
-    ScriptTitle = $null
-    IsLoaded = $true
-    IsElevated = $false
-    Platform = [System.Environment]::OSVersion.Platform
-}
+function Copy-RegistryItem {
+    <#
+    .SYNOPSIS
+        Copies a registry property or key to the target destination.
+    .PARAMETER Path
+        The path to the key to copy.
+    .PARAMETER Destination
+        The path the the key to copy to.
+    .PARAMETER Name
+        The name of the property to copy.
+    .PARAMETER Recurse
+        Recursively copy all subkeys from the target key path.
+    .PARAMETER Force
+        Create the destination key if it does not exist.
+    .EXAMPLE
+        Copy-RegistryItem -Path HKLM:\SOFTWARE\Canon -Destination HKLM:\SOFTWARE\_automation\RegistryBackup -Force -Recurse
+        Copy all keys, subkeys, and properties from HKLM:\SOFTWARE\Canon to HKLM:\SOFTWARE\_automation\RegistryBackup
+    .EXAMPLE
+        Copy-RegistryItem -Path HKLM:\SOFTWARE\Adobe -Name PDFFormat -Destination HKLM:\SOFTWARE\_automation\RegistryBackup\Adobe -Force
+        Copy the PDFFormat property from HKLM:\SOFTWARE\Adobe to HKLM:\SOFTWARE\_automation\RegistryBackup\Adobe
+    #>
+    [CmdletBinding()]
+    [OutputType([Microsoft.Win32.RegistryKey])]
+    param (
+        [Parameter(ParameterSetName = 'Property')]
+        [Parameter(ParameterSetName = 'Key')]
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(ParameterSetName = 'Property')]
+        [Parameter(ParameterSetName = 'Key')]
+        [Parameter(Mandatory)][string]$Destination,
+        [Parameter(ParameterSetName = 'Property')]
+        [string]$Name,
+        [Parameter(ParameterSetName = 'Key')]
+        [switch]$Recurse,
+        [Parameter(ParameterSetName = 'Property')]
+        [Parameter(ParameterSetName = 'Key')]
+        [switch]$Force
+    )
 
-if ($MyInvocation.PSCommandPath) {
-    $scriptObject = Get-Item -Path $MyInvocation.PSCommandPath
-    $StrapperSession.WorkingPath = $($scriptObject.DirectoryName)
-    $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-log.txt"
-    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-data.txt"
-    $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-error.txt"
-    $StrapperSession.ScriptTitle = $scriptObject.BaseName
-} else {
-    $StrapperSession.WorkingPath = (Get-Location).Path
-    $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-log.txt"
-    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-data.txt"
-    $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-error.txt"
-    $StrapperSession.ScriptTitle = '***Manual Run***'
-}
+    if($StrapperSession.Platform -ne 'Win32NT') {
+        Write-Error 'This function is only supported on Windows-based platforms.' -ErrorAction Stop
+    }
 
-if ($StrapperSession.Platform -eq 'Win32NT') {
-    $StrapperSession.IsElevated = (New-Object -TypeName Security.Principal.WindowsPrincipal -ArgumentList ([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
-} else {
-    $StrapperSession.IsElevated = $(id -u) -eq 0
-}
+    if ((Get-Item -Path ($Path -split '\\')[0]).GetType() -ne [Microsoft.Win32.RegistryKey]) {
+        Write-Log -Text 'The supplied path does not correlate to a registry key.' -Type ERROR
+        return $null
+    } elseif ((Get-Item -Path ($Destination -split '\\')[0]).GetType() -ne [Microsoft.Win32.RegistryKey]) {
+        Write-Log -Text 'The supplied destination does not correlate to a registry key.' -Type ERROR
+        return $null
+    } elseif (!(Test-Path -Path $Path)) {
+        Write-Log -Text "Path '$Path' does not exist." -Type ERROR
+        return $null
+    } elseif (!(Test-Path -Path $Destination) -and $Force) {
+        Write-Log -Text "'$Destination' does not exist. Creating."
+        New-Item -Path $Destination -Force | Out-Null
+    } elseif (!(Test-Path -Path $Destination)) {
+        Write-Log -Text "Destination '$Destination' does not exist." -Type ERROR
+        return $null
+    }
 
-$publicFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" -Recurse )
-$privateFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1" -Recurse )
-foreach ($scriptImport in @($publicFunctions + $privateFunctions)) {
-    try {
-        . $scriptImport.FullName
-    } catch {
-        Write-Error -Message "Failed to import $($scriptImport.FullName)"
+    if ($Name) {
+        if (Copy-ItemProperty -Path $Path -Destination $Destination -Name $Name -PassThru) {
+            return Get-Item -Path $Destination
+        } else {
+            Write-Log -Message "An error occurred when writing the registry property: $($error[0].Exception.Message)" -Type ERROR
+        }
+    } else {
+        return Copy-Item -Path $Path -Destination $Destination -Recurse:$Recurse -PassThru
     }
 }
-
-Export-ModuleMember -Variable StrapperSession
-
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB7W5vEagpor/PY
-# /nd83a2fW7B5M7bLFWGqTmmsdUTGAKCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBO+Wr5wwPomPfI
+# P3eMN3xbKTQOEvhSPqcsXxqDjFY+QKCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -226,32 +252,32 @@ Export-ModuleMember -Variable StrapperSession
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCD6vEFgtP8OzTVOf9zxUfAW
-# x3klWciXT+4F15VusT/K1TANBgkqhkiG9w0BAQEFAASCAYA0KNFugynWp+IxKKWq
-# 2fhoWW2AorBTvyqc3RKXu11Sq7PjrMeJJOuMdv97w/tArDagPSB4UGGtDjgFHbDS
-# Sh7hdIfgZnWt77AENy1CaKJtvWOrkeRIRHAgYevh76DlovXaPoX47z48ok3MSoJE
-# RrB50ytQ34onPNtlGXl0fL53mJ6fHK2ypYvEgiuv6ebiMFwnqeWbJd6CTusmpwWQ
-# QWX6BNxR7DE1IY2q2FKYN4W+Q5gve4Ag2S2HEGiFSWlBaVk6aSehsq88xmt8xr0q
-# PtMxfVUtyj8+tbfnzGvnjzkMjcZO4eRJ0IGt02Qkjd6pr3FyeSm5/Ew2bnlsQSk+
-# eR28hJQqoA6/+XdXktN91sMkTeU29M4SNVIdVhhB/hsnoD5N6XXFBTRZm2zuoPzC
-# ptccb4gJmRJl0K0KjUWfQ4PpOoWD7x/26LFZFMjYeXRuncWJ1GRE5hNda02T1vAS
-# FaKWaxneLyx6ryBYBzGLn/tHMuuDLDWllc6Adfo9dLpw+A+hggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCC8mvXhfTc9SF9h7r5Mmeue
+# NOAPxsd6YI3KYPPALxeRFjANBgkqhkiG9w0BAQEFAASCAYAtz3LPM+71gKe+W+JY
+# p7JajHiU9z8Jf7UK5bNmGZxu3zBIZLTSqquyR+NH487pGzGuoWJHB81HYn7JPAMa
+# Fw4vDtduuZ+LqWdSD16CKNKz02fL/JovYoB7+Q+p6iKhhc3nWduBQt62gZJwY2x8
+# yWWHmXSsQUhBv/Gg1oFLKmjSxHy0btlYHKzMEWO4G2l9fkELyWZh98ciuPb463RX
+# oEyf+My9nFOWdg1k6Uowjz5dZ0hpJJGpu/1GrOU49gPqqVdm6BqGUyPGQJrP+YCU
+# FAL3zDIj9cH8ml3c0cPWGMYz21Kn/28YWEVajHbH9t2HhQh8gLw2AWJIEFFWCAum
+# Hj6SOXqc46bUlIUtnngDsbQpnIQEPrv2mMobzpyITXRlgisvwh7nhLb3H0HsVOz/
+# 7P0+cvGVCmwRdjyD8oA++MmWOVuEunqxFitRGvhQp6MTCysRZu6Wp95Y7UxK+w61
+# EazcAYuxvqs+v/E4lKcwNOrRvAD8Z24PkQSMwHW/DiiRcZmhggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTgwM1ow
-# PwYJKoZIhvcNAQkEMTIEMHcRy7QMN/iSCrc5nPKV4AuYvxB4cwwFc+nuwhzOw6gJ
-# omEx4+br/WPUEUtkY5VvbTANBgkqhkiG9w0BAQEFAASCAgCP7sQOK5NpwPex0SoO
-# U9+kN+ohg0hKY6escKFQmRKIxRB6QwW2aYRqPSDdYSXuWrTPEDYo2HQY8Qd3oFkr
-# NAWWPEaBY5U/P8n/uglelFXf2+RnJt4K5yPmcL2IRvnGnbfZtXknEZtfNsoIkcFw
-# xKn1J2/7HO9Jd2SPx/PTuRQCKbtC8nuwr/TL1imtwFeV6FmMAofdz002CZJj5gLm
-# IHUHWmoYxUiKfbkzeCwIrdZomCxeFgwF9u9YSKxN8VOqzoCn+iM7dBIYvOTSs0kK
-# CnN7GaPu/uoTEUTqn+3YReLL9WA2dFjpiKKi+ANcD4M4kd+xIv9fDt7oSVlY0bmb
-# q5aQsSNMRO6HDwatz79kvd2GooARAnmaJElrfEhcUEwdiFXHIM0Sisf3fAMCYJaP
-# Q6KCsytz+JzH45DWi0oxi127TzX+bJdTbVJ0/JcSGA6GMrXhSUj+6VvHKScJ65jA
-# HK2TkBienD+7yRUvxEPVJJMgwAbb6sbb/ZWK6pXf4A3GqRgUiJnBWTL0jsQWjA2k
-# b0NTIdOBVbXN/YWfeY0ruIFk5huAQd5Oy/3eZAM0TxqHPxpPHPBvoL7herOop7oB
-# 0K782Rtaxx7U16lLQmpU3jFq+mN3OTIyHJXGw64sTA2F3HiToneMp4WGKirT6dT9
-# aDrGm/L5YGtU+V0SV/YsvkRk7g==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTgxNVow
+# PwYJKoZIhvcNAQkEMTIEMCtkLki1tF2Fy94sf6THd2LdSwJP+09Z4QAuo8gem0V7
+# /5XJaJC/baNMbrcmso5JfDANBgkqhkiG9w0BAQEFAASCAgBkPx0XrrPc4RJ5BNht
+# YGL9/5rsemW7IOFnvgadxTpaFBb5Dfp9rr/MwfuoP9OrUGswiwqmvvhMo+8Tcbn4
+# GHsyTOwCMNf4vsGBxUNv5541OiwxSfi3RcfIy7WuUs+odQcz2dQkZs6gXSPsZDEg
+# vJGHz6FAF+UxnHPCc/0mrbo0qMnCAoekclGOwmwTAtRRj82DyJH6WHo4j0opQErC
+# tMIOyWNVrKUV7x4XhUaSYoIVm2prXgSgtY813GULOJWl6SGi1+GkZPSjJ6tyk/OT
+# dRqLSFnwaNgSJ4o/KlZnzo6oF/w29ZnekF0USNPP4BoUEuiddvi5QKEYVXZxXVSN
+# vzE1Vrodr88XP7qFQ22pg8jUAUa1h765KO5xDQfkQDvwmXL1MzLhpFgwIFKEk90u
+# JYCNuacTSdIt30zDIFS9QTnAc/XVZv82LqmrDJIoJp84mKo75pbfXb+eG2jFSPON
+# fq+DrFO9Sx7rrkjfl3ECQFB5/rfrlS+S6W5sCXbSMQJlEcRdnHxsLEasMBO6wP/F
+# Nuemagka6psE/AFP/zejelJjQDW1P+vLtsKA4gr9Q2WlUD381/68J4A27lhsI23F
+# I439P6p/mwoZ4W0+hf1ic3qd4O5Zxk2jrdPHEJZ2y0dJopARoGfM8XiICaZpNpsc
+# WZ8a32CRn7lA5Uc+h7VAja8wfA==
 # SIG # End signature block

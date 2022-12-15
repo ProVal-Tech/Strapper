@@ -1,52 +1,40 @@
-$StrapperSession = [pscustomobject]@{
-    LogPath = $null
-    DataPath = $null
-    ErrorPath = $null
-    WorkingPath = $null
-    ScriptTitle = $null
-    IsLoaded = $true
-    IsElevated = $false
-    Platform = [System.Environment]::OSVersion.Platform
-}
-
-if ($MyInvocation.PSCommandPath) {
-    $scriptObject = Get-Item -Path $MyInvocation.PSCommandPath
-    $StrapperSession.WorkingPath = $($scriptObject.DirectoryName)
-    $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-log.txt"
-    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-data.txt"
-    $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-error.txt"
-    $StrapperSession.ScriptTitle = $scriptObject.BaseName
-} else {
-    $StrapperSession.WorkingPath = (Get-Location).Path
-    $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-log.txt"
-    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-data.txt"
-    $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-error.txt"
-    $StrapperSession.ScriptTitle = '***Manual Run***'
-}
-
-if ($StrapperSession.Platform -eq 'Win32NT') {
-    $StrapperSession.IsElevated = (New-Object -TypeName Security.Principal.WindowsPrincipal -ArgumentList ([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
-} else {
-    $StrapperSession.IsElevated = $(id -u) -eq 0
-}
-
-$publicFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" -Recurse )
-$privateFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1" -Recurse )
-foreach ($scriptImport in @($publicFunctions + $privateFunctions)) {
-    try {
-        . $scriptImport.FullName
-    } catch {
-        Write-Error -Message "Failed to import $($scriptImport.FullName)"
+function Install-Chocolatey {
+    <#
+    .SYNOPSIS
+        Installs or updates the Chocolatey package manager.
+    .EXAMPLE
+        PS C:\> Install-Chocolatey
+    #>
+    if($StrapperSession.Platform -ne 'Win32NT') {
+        Write-Error 'Chocolatey is only supported on Windows-based platforms. Use your better package manager instead. ;)' -ErrorAction Stop
     }
+    if ($env:path -split ';' -notcontains ";$($env:ALLUSERSPROFILE)\chocolatey\bin") {
+        $env:Path = $env:Path + ";$($env:ALLUSERSPROFILE)\chocolatey\bin"
+    }
+    if (Test-Path -Path "$($env:ALLUSERSPROFILE)\chocolatey\bin") {
+        Write-Log -Text 'Chocolatey installation detected.' -Type LOG
+        choco upgrade chocolatey -y | Out-Null
+        choco feature enable -n=allowGlobalConfirmation -confirm | Out-Null
+        choco feature disable -n=showNonElevatedWarnings -confirm | Out-Null
+        return 0
+    } else {
+        [Net.ServicePointManager]::SecurityProtocol = [Enum]::ToObject([Net.SecurityProtocolType], 3072)
+        Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+        choco feature enable -n=allowGlobalConfirmation -confirm | Out-Null
+        choco feature disable -n=showNonElevatedWarnings -confirm | Out-Null
+    }
+
+    if (!(Test-Path -Path "$($env:ALLUSERSPROFILE)\chocolatey\bin")) {
+        Write-Log -Text 'Chocolatey installation failed.' -Type ERROR
+        return 1
+    }
+    return 0
 }
-
-Export-ModuleMember -Variable StrapperSession
-
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB7W5vEagpor/PY
-# /nd83a2fW7B5M7bLFWGqTmmsdUTGAKCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCeTjpBHCxCf0qV
+# iYbQMYTCm7xCkcsTSDZ0Ag0kmxCSYqCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -226,32 +214,32 @@ Export-ModuleMember -Variable StrapperSession
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCD6vEFgtP8OzTVOf9zxUfAW
-# x3klWciXT+4F15VusT/K1TANBgkqhkiG9w0BAQEFAASCAYA0KNFugynWp+IxKKWq
-# 2fhoWW2AorBTvyqc3RKXu11Sq7PjrMeJJOuMdv97w/tArDagPSB4UGGtDjgFHbDS
-# Sh7hdIfgZnWt77AENy1CaKJtvWOrkeRIRHAgYevh76DlovXaPoX47z48ok3MSoJE
-# RrB50ytQ34onPNtlGXl0fL53mJ6fHK2ypYvEgiuv6ebiMFwnqeWbJd6CTusmpwWQ
-# QWX6BNxR7DE1IY2q2FKYN4W+Q5gve4Ag2S2HEGiFSWlBaVk6aSehsq88xmt8xr0q
-# PtMxfVUtyj8+tbfnzGvnjzkMjcZO4eRJ0IGt02Qkjd6pr3FyeSm5/Ew2bnlsQSk+
-# eR28hJQqoA6/+XdXktN91sMkTeU29M4SNVIdVhhB/hsnoD5N6XXFBTRZm2zuoPzC
-# ptccb4gJmRJl0K0KjUWfQ4PpOoWD7x/26LFZFMjYeXRuncWJ1GRE5hNda02T1vAS
-# FaKWaxneLyx6ryBYBzGLn/tHMuuDLDWllc6Adfo9dLpw+A+hggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCCAVuX9nRbJHB6KNerwZ0LH
+# 6Qmh3ndqKuP5uabsF/lo2DANBgkqhkiG9w0BAQEFAASCAYAfOdD4lrqbWS7di2X1
+# GZGO+zW9tsoBh3K5irlyYmXWsfEqYjC/vz2qNN4FSB6X2aD9lWPj2AAsxNkQiaLb
+# l9RGTvbBGZrm6EzpTzZeNNQ61vDzK8lwUFLuKiGKetS4oAkNsZ15ilrkQb5c4ZfR
+# Bcdwng1LnQfSWMS/bfsCilkrIMtYxubaJr8UqkHbkU2NEvKgR8s7h2OrJEJoNvv7
+# YlQAy87IOrCF+kNQCQ4lxw9GxH9MkI8Wqq9nApFxzjiiyIJUyvx/gjujZBtUFxrs
+# AUZwTGE98dtMJT/jO8AK5FufvMIhxDLhir+boaK/XPukVlBkUx5iecplwSztYH7R
+# LRUktoL8qp9HMKMdlHopQxpbR8JisAdh1r+5H/OOL50I620Rn5hM8M8OF9AzIrfG
+# ykUCooga59C3YZzQb0k5Dp4dP3vNnSsuwqEBeHxeM1eY68YvLV/UBaIGPDQf8gzf
+# MAgtg/BHxkGXy7x8GyyniP/TD2CTIrfekGsIn9nV4HlLw3ihggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTgwM1ow
-# PwYJKoZIhvcNAQkEMTIEMHcRy7QMN/iSCrc5nPKV4AuYvxB4cwwFc+nuwhzOw6gJ
-# omEx4+br/WPUEUtkY5VvbTANBgkqhkiG9w0BAQEFAASCAgCP7sQOK5NpwPex0SoO
-# U9+kN+ohg0hKY6escKFQmRKIxRB6QwW2aYRqPSDdYSXuWrTPEDYo2HQY8Qd3oFkr
-# NAWWPEaBY5U/P8n/uglelFXf2+RnJt4K5yPmcL2IRvnGnbfZtXknEZtfNsoIkcFw
-# xKn1J2/7HO9Jd2SPx/PTuRQCKbtC8nuwr/TL1imtwFeV6FmMAofdz002CZJj5gLm
-# IHUHWmoYxUiKfbkzeCwIrdZomCxeFgwF9u9YSKxN8VOqzoCn+iM7dBIYvOTSs0kK
-# CnN7GaPu/uoTEUTqn+3YReLL9WA2dFjpiKKi+ANcD4M4kd+xIv9fDt7oSVlY0bmb
-# q5aQsSNMRO6HDwatz79kvd2GooARAnmaJElrfEhcUEwdiFXHIM0Sisf3fAMCYJaP
-# Q6KCsytz+JzH45DWi0oxi127TzX+bJdTbVJ0/JcSGA6GMrXhSUj+6VvHKScJ65jA
-# HK2TkBienD+7yRUvxEPVJJMgwAbb6sbb/ZWK6pXf4A3GqRgUiJnBWTL0jsQWjA2k
-# b0NTIdOBVbXN/YWfeY0ruIFk5huAQd5Oy/3eZAM0TxqHPxpPHPBvoL7herOop7oB
-# 0K782Rtaxx7U16lLQmpU3jFq+mN3OTIyHJXGw64sTA2F3HiToneMp4WGKirT6dT9
-# aDrGm/L5YGtU+V0SV/YsvkRk7g==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTgyNFow
+# PwYJKoZIhvcNAQkEMTIEMFvufdlHNaMiiHsGWPcgskcQN2kPvv1kkT7S1Ad0eKgT
+# AVADKhqK4FW07Z38aBiRCTANBgkqhkiG9w0BAQEFAASCAgBipw1XCXmyVKOeT1a0
+# fnXPSiRZE5KVf5IoMo3ESylCWEfWS4fAdmls1A5hJKg9Q+TdgJ65n8NqDx2tYxXY
+# bsPeEMQccmM8JYUqcrkBa1bGdkhnk7LN5t2CXrE0u0ZLoXfESJ+F69I3C/RpUlEi
+# 2FrzqDX4ID/JvGvyGzbru86dIOAMhhJ+AHgev59zZVUGJqFAffgXYx0UTaDqDIpy
+# C1kxLF5QJjfAW12KLh0HmMUON4spq7Wh0wTfZs8gLqMrt6GQQunV//4WxR3fS95n
+# PqZAcnmLEYuXCe5QDLuBjDvnD3GjC1JCaTRlcGAi40E9p2NuxnpPyGy0BBjN7MDw
+# T1i3o8SQhbsaMO+LMRwlcw0oXafPZoWq8JsmY7YJO1kG/KvWBPf78iamYS7jGLAJ
+# GrF8jwgiZKvjtCsELvoVCiGeh9Xhg27f1n0lDDK7+2lUn5xJoUyqCTMV83VtNu2Q
+# IonNrr4VatEnLooASx1mZM2nDzXFeb/wRfyYWzlv/jynoxX+XD8qvrECRf36rbCC
+# DegDVUTzGPMRhnJmytzcbqpIL+bWPMxPxbaEVU9/hL+M/nsk3P3n/lqoTkOfZRJJ
+# cMrFZ6MdF1z9RGpcuTgRu7zRRYbjhQLLbMBueEPaoK63uxWe4ejUFC66UJBbgL5Y
+# CXzdFPkouo1peAeEg1kRefHOTw==
 # SIG # End signature block

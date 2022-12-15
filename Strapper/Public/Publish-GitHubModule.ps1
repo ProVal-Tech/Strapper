@@ -1,52 +1,52 @@
-$StrapperSession = [pscustomobject]@{
-    LogPath = $null
-    DataPath = $null
-    ErrorPath = $null
-    WorkingPath = $null
-    ScriptTitle = $null
-    IsLoaded = $true
-    IsElevated = $false
-    Platform = [System.Environment]::OSVersion.Platform
-}
-
-if ($MyInvocation.PSCommandPath) {
-    $scriptObject = Get-Item -Path $MyInvocation.PSCommandPath
-    $StrapperSession.WorkingPath = $($scriptObject.DirectoryName)
-    $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-log.txt"
-    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-data.txt"
-    $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-error.txt"
-    $StrapperSession.ScriptTitle = $scriptObject.BaseName
-} else {
-    $StrapperSession.WorkingPath = (Get-Location).Path
-    $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-log.txt"
-    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-data.txt"
-    $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-error.txt"
-    $StrapperSession.ScriptTitle = '***Manual Run***'
-}
-
-if ($StrapperSession.Platform -eq 'Win32NT') {
-    $StrapperSession.IsElevated = (New-Object -TypeName Security.Principal.WindowsPrincipal -ArgumentList ([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
-} else {
-    $StrapperSession.IsElevated = $(id -u) -eq 0
-}
-
-$publicFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" -Recurse )
-$privateFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1" -Recurse )
-foreach ($scriptImport in @($publicFunctions + $privateFunctions)) {
-    try {
-        . $scriptImport.FullName
-    } catch {
-        Write-Error -Message "Failed to import $($scriptImport.FullName)"
+function Publish-GitHubModule {
+    <#
+    .SYNOPSIS
+        Publish a PowerShell module to a GitHub repository.
+    .PARAMETER Path
+        The path to the psd1 file for the module to publish.
+    .PARAMETER Token
+        The Github personal access token to use for publishing.
+    .PARAMETER RepoUri
+        The URI to the GitHub repo to publish to.
+    .PARAMETER TempNugetPath
+        The path to use to make a temporary NuGet repo.
+    .EXAMPLE
+        Publish-GitHubModule `
+            -Path 'C:\users\user\Modules\MyModule\MyModule.psd1' `
+            -Token 'ghp_abcdefg1234567' `
+            -RepoUri 'https://github.com/user/MyModule'
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Token,
+        [Parameter(Mandatory)][string]$RepoUri,
+        [Parameter()][string]$TempNugetPath = "$env:SystemDrive\temp\nuget\publish"
+    )
+    if (!(Get-Module -ListAvailable -Name PowerShellGet | Where-Object { $_.Version.Major -ge 3 })) {
+        Install-Module -Name PowerShellGet -AllowPrerelease -Force
     }
+    $targetModule = Get-Module $Path -ListAvailable
+    if(!$targetModule) {
+        Write-Error -Message "Failed to locate a module with the path '$targetModule'. Please pass a path to a .psd1 and try again."
+        return
+    }
+    if(!(Test-Path -Path $TempNugetPath)) {
+        New-Item -Path $TempNugetPath -ItemType Directory
+    }
+    Register-PSResourceRepository -Name TempNuget -Uri $TempNugetPath
+    Publish-PSResource -Path $targetModule.ModuleBase -Repository TempNuget
+    if(!((dotnet tool list --global) | Select-String "^gpr.*gpr.*$")) {
+        dotnet tool install --global gpr
+    }
+    gpr push -k $Token "$TempNugetPath\$($targetModule.Name).$($targetModule.Version).nupkg" -r $RepoUri
+    Unregister-PSResourceRepository -Name TempNuget
 }
-
-Export-ModuleMember -Variable StrapperSession
-
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB7W5vEagpor/PY
-# /nd83a2fW7B5M7bLFWGqTmmsdUTGAKCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCA4Lt2SeGL/dNlZ
+# HLi5g6MeufDpOLbrMENlTaVjZIYO5KCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -226,32 +226,32 @@ Export-ModuleMember -Variable StrapperSession
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCD6vEFgtP8OzTVOf9zxUfAW
-# x3klWciXT+4F15VusT/K1TANBgkqhkiG9w0BAQEFAASCAYA0KNFugynWp+IxKKWq
-# 2fhoWW2AorBTvyqc3RKXu11Sq7PjrMeJJOuMdv97w/tArDagPSB4UGGtDjgFHbDS
-# Sh7hdIfgZnWt77AENy1CaKJtvWOrkeRIRHAgYevh76DlovXaPoX47z48ok3MSoJE
-# RrB50ytQ34onPNtlGXl0fL53mJ6fHK2ypYvEgiuv6ebiMFwnqeWbJd6CTusmpwWQ
-# QWX6BNxR7DE1IY2q2FKYN4W+Q5gve4Ag2S2HEGiFSWlBaVk6aSehsq88xmt8xr0q
-# PtMxfVUtyj8+tbfnzGvnjzkMjcZO4eRJ0IGt02Qkjd6pr3FyeSm5/Ew2bnlsQSk+
-# eR28hJQqoA6/+XdXktN91sMkTeU29M4SNVIdVhhB/hsnoD5N6XXFBTRZm2zuoPzC
-# ptccb4gJmRJl0K0KjUWfQ4PpOoWD7x/26LFZFMjYeXRuncWJ1GRE5hNda02T1vAS
-# FaKWaxneLyx6ryBYBzGLn/tHMuuDLDWllc6Adfo9dLpw+A+hggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCDUZIC/sEjxP5Yhclsi1u9a
+# uUBPYAYhmFEqOhpF9JmZaDANBgkqhkiG9w0BAQEFAASCAYBUECDMUFzjjEHB2p8C
+# uEkhSaF2c8IVtuF0PIVEpLA2KgsruaX31+6sIA74Zia/N4fdv7kavD7breQrnySl
+# XiHusjJra5g+pm1xEiYK1e0mZd6rf3aAvc4jfLNiUMGLypja6QrcWFAQZoosnrHa
+# B6stP32MHXKDKIr+TBcqzvlT0+k1pOxZ2fGhi97UYOXLxupEAvjqDsJT7TGTLC0h
+# c75of7Ra7c+QVOR/+GJ64MypABLrw19MohuaIpU9KAUQoKl0N/U+f0XL2ThFVyES
+# 20qQtX428ZXM6ToRW9P2wd9B1fMRzlH5r5ckCWlGBPApoPLZexOt45hiFSw6MrLJ
+# eZE51vb7QiZG2DDeSzhjJF1sO3PsoFsqidUyGvioMuiWvvBzFn3CjSF25clvirNT
+# Xj/cMpOrZUQipdz3oKyoIAFMWvG/3A9QoBMsNNaHzBjr//iiuBYdLoLdAgmtweM3
+# BdPjZFOLIohLBBHH2UckJbKmDx9h3puPPj/uz4Hb8+Yj+xShggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTgwM1ow
-# PwYJKoZIhvcNAQkEMTIEMHcRy7QMN/iSCrc5nPKV4AuYvxB4cwwFc+nuwhzOw6gJ
-# omEx4+br/WPUEUtkY5VvbTANBgkqhkiG9w0BAQEFAASCAgCP7sQOK5NpwPex0SoO
-# U9+kN+ohg0hKY6escKFQmRKIxRB6QwW2aYRqPSDdYSXuWrTPEDYo2HQY8Qd3oFkr
-# NAWWPEaBY5U/P8n/uglelFXf2+RnJt4K5yPmcL2IRvnGnbfZtXknEZtfNsoIkcFw
-# xKn1J2/7HO9Jd2SPx/PTuRQCKbtC8nuwr/TL1imtwFeV6FmMAofdz002CZJj5gLm
-# IHUHWmoYxUiKfbkzeCwIrdZomCxeFgwF9u9YSKxN8VOqzoCn+iM7dBIYvOTSs0kK
-# CnN7GaPu/uoTEUTqn+3YReLL9WA2dFjpiKKi+ANcD4M4kd+xIv9fDt7oSVlY0bmb
-# q5aQsSNMRO6HDwatz79kvd2GooARAnmaJElrfEhcUEwdiFXHIM0Sisf3fAMCYJaP
-# Q6KCsytz+JzH45DWi0oxi127TzX+bJdTbVJ0/JcSGA6GMrXhSUj+6VvHKScJ65jA
-# HK2TkBienD+7yRUvxEPVJJMgwAbb6sbb/ZWK6pXf4A3GqRgUiJnBWTL0jsQWjA2k
-# b0NTIdOBVbXN/YWfeY0ruIFk5huAQd5Oy/3eZAM0TxqHPxpPHPBvoL7herOop7oB
-# 0K782Rtaxx7U16lLQmpU3jFq+mN3OTIyHJXGw64sTA2F3HiToneMp4WGKirT6dT9
-# aDrGm/L5YGtU+V0SV/YsvkRk7g==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTgzMFow
+# PwYJKoZIhvcNAQkEMTIEMLRQOIWVhYqVYbn+iRKaTYDTTjetxUDoi2yAqm07Qqhe
+# W11aJj5+NORFfQWUF6eniTANBgkqhkiG9w0BAQEFAASCAgCCXHMXUxBTXqLve85+
+# QgPt31/4qXsUhKIRHHeegEihG6VTZLlVlaGwgjjafv8Y51Z6zxJ34MJZE0NQ7glS
+# 7tZu98+5RTDH0jOO4vX6ymYCcd6erd+9EtXJKBABHoNzKzM3pNCFSuZUSePcEALy
+# wqc1KUDtdTWs7MjnL97uT+L9NLZ5Roz8F7x3bxnOxvwpz8puuG9t99YbONTWqqJ4
+# H8zlIEBxtDzjHoEbjQ0qlQCwU1azxltz0ijRPyBxytE0hBT+Ej6JXf1NCMFTifJ2
+# 0uweCTrOxoXY/rZClgppGV5XifGerH0IAcQzl9nmi82l+GxyldbYtd+MQ0fRA0Te
+# wgh2WfA/msF+dDbvf7LEuSsDX6LMNH3rd/tYoM1IGINI7wccImG89H41QLgOXUfP
+# vvV7QbL6lPclwgJNAtdnZFcxAT/hm9gfR83PpQqjlP19S4WJGtZG/13h+n+pSFC7
+# d8fJ5VIR2ac1papXoLSGJsSdUWOzN7JjAVeuuussssl9BPvdnHNalW2fYyMH96oD
+# M2KXa0vx393YvguztYkrMjIVaUrIIQrModSZRCPkfMa+u03+bHcmcNgg76YO6LHR
+# P1dg6Tv1UhWieEc3/vsfrB3NT8Nh/VH/Ez6xJYMMfZkZa2Mz60c7uYDmu3+7NeC4
+# SpVVu4xSR+nQCG+KC1MNQgcrVA==
 # SIG # End signature block

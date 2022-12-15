@@ -24,7 +24,7 @@ Install-Module -Name Strapper -Force
 ### Alternative Install
 
 ```powershell
-git clone "https://github.com/ProVal-Tech/Strapper" (Join-Path ($env:PSModulePath -split $(if(!$IsWindows) {':'} else {';'}) | Select-Object -First 1) "Strapper\1.0.0")
+git clone "https://github.com/ProVal-Tech/Strapper" (Join-Path ($env:PSModulePath -split $(if(!$IsWindows) {':'} else {';'}) | Select-Object -First 1) "Strapper\1.3.0")
 ```
 
 ## Usage

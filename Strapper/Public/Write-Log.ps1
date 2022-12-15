@@ -1,52 +1,58 @@
-$StrapperSession = [pscustomobject]@{
-    LogPath = $null
-    DataPath = $null
-    ErrorPath = $null
-    WorkingPath = $null
-    ScriptTitle = $null
-    IsLoaded = $true
-    IsElevated = $false
-    Platform = [System.Environment]::OSVersion.Platform
-}
-
-if ($MyInvocation.PSCommandPath) {
-    $scriptObject = Get-Item -Path $MyInvocation.PSCommandPath
-    $StrapperSession.WorkingPath = $($scriptObject.DirectoryName)
-    $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-log.txt"
-    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-data.txt"
-    $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-error.txt"
-    $StrapperSession.ScriptTitle = $scriptObject.BaseName
-} else {
-    $StrapperSession.WorkingPath = (Get-Location).Path
-    $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-log.txt"
-    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-data.txt"
-    $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-error.txt"
-    $StrapperSession.ScriptTitle = '***Manual Run***'
-}
-
-if ($StrapperSession.Platform -eq 'Win32NT') {
-    $StrapperSession.IsElevated = (New-Object -TypeName Security.Principal.WindowsPrincipal -ArgumentList ([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
-} else {
-    $StrapperSession.IsElevated = $(id -u) -eq 0
-}
-
-$publicFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" -Recurse )
-$privateFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1" -Recurse )
-foreach ($scriptImport in @($publicFunctions + $privateFunctions)) {
-    try {
-        . $scriptImport.FullName
-    } catch {
-        Write-Error -Message "Failed to import $($scriptImport.FullName)"
+function Write-Log {
+    <#
+    .SYNOPSIS
+        Writes a message to a log file, the console, or both.
+    .EXAMPLE
+        PS C:\> Write-Log -Text "An error occurred." -Type ERROR
+        This will write an error to the console, the log file, and the error log file.
+    .PARAMETER Text
+        The message to pass to the log.
+    .PARAMETER StringArray
+        An array of strings to write to the log.
+    .PARAMETER Type
+        The type of log message to pass in. The options are:
+        LOG     - Outputs to the log file and console.
+        WARN    - Outputs to the log file and console.
+        ERROR   - Outputs to the log file, error file, and console.
+        SUCCESS - Outputs to the log file and console.
+        DATA    - Outputs to the log file, data file, and console.
+        INIT    - Outputs to the log file and console.
+        Default (Any other string) - Outputs to the log file and console.
+    .NOTES
+        If this function is run on the console then it will output a log file to the current directory in the format YYYYMMDD-log/data/error.txt
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true, Position = 0, ParameterSetName = 'String')]
+        [AllowEmptyString()][Alias('Message')]
+        [string]$Text,
+        [Parameter(Mandatory = $true, Position = 0, ParameterSetName = 'StringArray')]
+        [AllowEmptyString()]
+        [string[]]$StringArray,
+        [Parameter(Mandatory = $false, Position = 1, ParameterSetName = 'String')]
+        [Parameter(Mandatory = $false, Position = 1, ParameterSetName = 'StringArray')]
+        [string]$Type = 'LOG'
+    )
+    if (!($StrapperSession.logPath -and $StrapperSession.dataPath -and $StrapperSession.errorPath)) {
+        $location = (Get-Location).Path
+        $StrapperSession.logPath = Join-Path $location "$((Get-Date).ToString('yyyyMMdd'))-log.txt"
+        $StrapperSession.dataPath = Join-Path $location "$((Get-Date).ToString('yyyyMMdd'))-data.txt"
+        $StrapperSession.errorPath = Join-Path $location "$((Get-Date).ToString('yyyyMMdd'))-error.txt"
+    }
+    #Optimize-Content -Path $script:logPath
+    if ($StringArray) {
+        foreach ($logItem in $StringArray) {
+            Write-LogHelper -Text $logItem -Type $Type
+        }
+    } elseif ($Text) {
+        Write-LogHelper -Text $Text -Type $Type
     }
 }
-
-Export-ModuleMember -Variable StrapperSession
-
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB7W5vEagpor/PY
-# /nd83a2fW7B5M7bLFWGqTmmsdUTGAKCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDjyLcVptgAZru+
+# eKZMNJYD3fngdo7FKdx6RNlZwjZszqCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -226,32 +232,32 @@ Export-ModuleMember -Variable StrapperSession
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCD6vEFgtP8OzTVOf9zxUfAW
-# x3klWciXT+4F15VusT/K1TANBgkqhkiG9w0BAQEFAASCAYA0KNFugynWp+IxKKWq
-# 2fhoWW2AorBTvyqc3RKXu11Sq7PjrMeJJOuMdv97w/tArDagPSB4UGGtDjgFHbDS
-# Sh7hdIfgZnWt77AENy1CaKJtvWOrkeRIRHAgYevh76DlovXaPoX47z48ok3MSoJE
-# RrB50ytQ34onPNtlGXl0fL53mJ6fHK2ypYvEgiuv6ebiMFwnqeWbJd6CTusmpwWQ
-# QWX6BNxR7DE1IY2q2FKYN4W+Q5gve4Ag2S2HEGiFSWlBaVk6aSehsq88xmt8xr0q
-# PtMxfVUtyj8+tbfnzGvnjzkMjcZO4eRJ0IGt02Qkjd6pr3FyeSm5/Ew2bnlsQSk+
-# eR28hJQqoA6/+XdXktN91sMkTeU29M4SNVIdVhhB/hsnoD5N6XXFBTRZm2zuoPzC
-# ptccb4gJmRJl0K0KjUWfQ4PpOoWD7x/26LFZFMjYeXRuncWJ1GRE5hNda02T1vAS
-# FaKWaxneLyx6ryBYBzGLn/tHMuuDLDWllc6Adfo9dLpw+A+hggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCDd5ERu4FxA1pLZcHb/kYHI
+# Axk85zdGsb/n3FoqPA9tzTANBgkqhkiG9w0BAQEFAASCAYBXo207a2JY3vQ5Vrh3
+# Qj8qtbcXUfbxFedxwQN9mqOpJdxK7AtL2dIacv5xTCMRc7Im7UTn8q9FjL2liCCk
+# 27Jka9pSVVdvI1QhU/RoIKVNRAL7JfHM6iLf5/TQuE4h25VmZNTMDdEQoA3Eaz+T
+# qJqajUTDcGVeFTmdFJWpRXk7IwZkUVUqZ1DYTZt96y6UVarIdokFhX9amM581Tvd
+# DIiHv4iFD9ptGY2rbkYFbYec6XydYo5MCUwE4ueQezvh4Oiz90CS2UOp0UUJI7SE
+# IrMZtomgZvs7LpmRQVAn7B9ALDLwxJRrKA+PebQApRAusqtrx0ICNr+I/UqZNF2y
+# OjzzTXoMGEIix2fisgTTJQ2riM/G2vRF+Zq0rdZ211PbtCtJGXE1X7+/u5PBSND5
+# AHEH1IxRqYmfx0LLF/BGJoOfWBD5EnkW5XBBLBqR7WkPzWDQf2wHfsDjFXEyLTUW
+# BrCCGMAWwLzmoXFgCBzLaP8cGiIzRA8gIYhu0qnYif3/deqhggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTgwM1ow
-# PwYJKoZIhvcNAQkEMTIEMHcRy7QMN/iSCrc5nPKV4AuYvxB4cwwFc+nuwhzOw6gJ
-# omEx4+br/WPUEUtkY5VvbTANBgkqhkiG9w0BAQEFAASCAgCP7sQOK5NpwPex0SoO
-# U9+kN+ohg0hKY6escKFQmRKIxRB6QwW2aYRqPSDdYSXuWrTPEDYo2HQY8Qd3oFkr
-# NAWWPEaBY5U/P8n/uglelFXf2+RnJt4K5yPmcL2IRvnGnbfZtXknEZtfNsoIkcFw
-# xKn1J2/7HO9Jd2SPx/PTuRQCKbtC8nuwr/TL1imtwFeV6FmMAofdz002CZJj5gLm
-# IHUHWmoYxUiKfbkzeCwIrdZomCxeFgwF9u9YSKxN8VOqzoCn+iM7dBIYvOTSs0kK
-# CnN7GaPu/uoTEUTqn+3YReLL9WA2dFjpiKKi+ANcD4M4kd+xIv9fDt7oSVlY0bmb
-# q5aQsSNMRO6HDwatz79kvd2GooARAnmaJElrfEhcUEwdiFXHIM0Sisf3fAMCYJaP
-# Q6KCsytz+JzH45DWi0oxi127TzX+bJdTbVJ0/JcSGA6GMrXhSUj+6VvHKScJ65jA
-# HK2TkBienD+7yRUvxEPVJJMgwAbb6sbb/ZWK6pXf4A3GqRgUiJnBWTL0jsQWjA2k
-# b0NTIdOBVbXN/YWfeY0ruIFk5huAQd5Oy/3eZAM0TxqHPxpPHPBvoL7herOop7oB
-# 0K782Rtaxx7U16lLQmpU3jFq+mN3OTIyHJXGw64sTA2F3HiToneMp4WGKirT6dT9
-# aDrGm/L5YGtU+V0SV/YsvkRk7g==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTg0NVow
+# PwYJKoZIhvcNAQkEMTIEMEG+GY+l28W3hE89I/RQjLiticx729jVC47Jec5NZs3g
+# QOUOVklqH2L2alvkdzfr2jANBgkqhkiG9w0BAQEFAASCAgAPj7Z7olG4EubOB3yh
+# 84ncntuHWXrVXNbBB3SLV1kZPKFXlcVu7oSX/xKgyV55v5QPGtUMoR27HkGF0MgX
+# TVI5VhG4AtGPnhLgCRs1lRu45vW4IebvlL+DyOkQT/M/my7+bJ0oPrO1xyFD7uMQ
+# qIPSW17ObZ3AG4s56umLitfWBowx//9n54kt0Qm+Xsx10T2xVrw5ZWzFZP9mDgSU
+# Rdkp07XsAbaLiV83i1P1pc/axeW6HFne5QifuwxfEkkATemaNHsjtJUIMGKQtyAe
+# eqakAT26SKdZ22m7JE1wcr6l1EtJFZ6ZZjPwopIh4c06T+uOH67dQtAqSw9UxLMy
+# vpwaMrp+72UVIr2+8pnZ6wu5y6UzNVml3PkJ2EqJiUEEZbEAKRABrBtgcuuTaJ39
+# QdBdfw+b2x3+iBdEYunw/oW3VnBfDB3+vxBhuf+CTTHleM8dAkrPY2bSr9g2pi0y
+# vzzAATDRy1i09lXVylEeBIJPX31oNVNoul4drZZoMVQi4YONNzg4uwGlIDc0C2ZC
+# 2eF1QpZ3A5IgQjP9wtcYHItawS7RV2O+Kwr8TGrNYmTpDf9tj14AJ0+AaodFxKoW
+# QhFCD8gWn5PjWI14DqPOK7wZktkGJQlJTJB48tmOL3K1LWcB0DKx3NSGnZLFiMOC
+# D9c7BAfga+HS5owDv23mfIMuSQ==
 # SIG # End signature block

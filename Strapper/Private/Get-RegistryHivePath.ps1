@@ -1,52 +1,49 @@
-$StrapperSession = [pscustomobject]@{
-    LogPath = $null
-    DataPath = $null
-    ErrorPath = $null
-    WorkingPath = $null
-    ScriptTitle = $null
-    IsLoaded = $true
-    IsElevated = $false
-    Platform = [System.Environment]::OSVersion.Platform
-}
-
-if ($MyInvocation.PSCommandPath) {
-    $scriptObject = Get-Item -Path $MyInvocation.PSCommandPath
-    $StrapperSession.WorkingPath = $($scriptObject.DirectoryName)
-    $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-log.txt"
-    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-data.txt"
-    $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-error.txt"
-    $StrapperSession.ScriptTitle = $scriptObject.BaseName
-} else {
-    $StrapperSession.WorkingPath = (Get-Location).Path
-    $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-log.txt"
-    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-data.txt"
-    $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-error.txt"
-    $StrapperSession.ScriptTitle = '***Manual Run***'
-}
-
-if ($StrapperSession.Platform -eq 'Win32NT') {
-    $StrapperSession.IsElevated = (New-Object -TypeName Security.Principal.WindowsPrincipal -ArgumentList ([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
-} else {
-    $StrapperSession.IsElevated = $(id -u) -eq 0
-}
-
-$publicFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" -Recurse )
-$privateFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1" -Recurse )
-foreach ($scriptImport in @($publicFunctions + $privateFunctions)) {
-    try {
-        . $scriptImport.FullName
-    } catch {
-        Write-Error -Message "Failed to import $($scriptImport.FullName)"
+function Get-RegistryHivePath {
+    <#
+    .SYNOPSIS
+        Gets a list of registry hives from the local computer.
+    .NOTES
+        Bootstrap use only.
+    .EXAMPLE
+        Get-RegistryHivePath
+        Returns the full list of registry hives.
+    .PARAMETER ExcludeDefault
+        Exclude the Default template hive from the return.
+    #>
+    [CmdletBinding()]
+    [OutputType([PSCustomObject])]
+    param (
+        [Parameter(Mandatory = $false)][switch]$ExcludeDefault
+    )
+    if($StrapperSession.Platform -ne 'Win32NT') {
+        Write-Error 'This function is only supported on Windows-based platforms.' -ErrorAction Stop
     }
+    # Regex pattern for SIDs
+    $patternSID = '((S-1-5-21)|(S-1-12-1))-\d+-\d+\-\d+\-\d+$'
+
+    # Get Username, SID, and location of ntuser.dat for all users
+    $profileList = @(
+        Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\*' | Where-Object { $_.PSChildName -match $PatternSID } |
+            Select-Object @{name = 'SID'; expression = { $_.PSChildName } },
+            @{name = 'UserHive'; expression = { "$($_.ProfileImagePath)\ntuser.dat" } },
+            @{name = 'Username'; expression = { $_.ProfileImagePath -replace '^(.*[\\\/])', '' } }
+    )
+
+    # If the default user was not excluded, add it to the list of profiles to process.
+    if (!$ExcludeDefault) {
+        $profileList += [PSCustomObject]@{
+            SID = 'DefaultUserTemplate'
+            UserHive = "$env:SystemDrive\Users\Default\ntuser.dat"
+            Username = 'DefaultUserTemplate'
+        }
+    }
+    return $profileList
 }
-
-Export-ModuleMember -Variable StrapperSession
-
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB7W5vEagpor/PY
-# /nd83a2fW7B5M7bLFWGqTmmsdUTGAKCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBNBPeDAUiNv1fb
+# x1bqLEfCv4a0GQc+BA0s+FOobnCZaqCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -226,32 +223,32 @@ Export-ModuleMember -Variable StrapperSession
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCD6vEFgtP8OzTVOf9zxUfAW
-# x3klWciXT+4F15VusT/K1TANBgkqhkiG9w0BAQEFAASCAYA0KNFugynWp+IxKKWq
-# 2fhoWW2AorBTvyqc3RKXu11Sq7PjrMeJJOuMdv97w/tArDagPSB4UGGtDjgFHbDS
-# Sh7hdIfgZnWt77AENy1CaKJtvWOrkeRIRHAgYevh76DlovXaPoX47z48ok3MSoJE
-# RrB50ytQ34onPNtlGXl0fL53mJ6fHK2ypYvEgiuv6ebiMFwnqeWbJd6CTusmpwWQ
-# QWX6BNxR7DE1IY2q2FKYN4W+Q5gve4Ag2S2HEGiFSWlBaVk6aSehsq88xmt8xr0q
-# PtMxfVUtyj8+tbfnzGvnjzkMjcZO4eRJ0IGt02Qkjd6pr3FyeSm5/Ew2bnlsQSk+
-# eR28hJQqoA6/+XdXktN91sMkTeU29M4SNVIdVhhB/hsnoD5N6XXFBTRZm2zuoPzC
-# ptccb4gJmRJl0K0KjUWfQ4PpOoWD7x/26LFZFMjYeXRuncWJ1GRE5hNda02T1vAS
-# FaKWaxneLyx6ryBYBzGLn/tHMuuDLDWllc6Adfo9dLpw+A+hggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCB1NWMunuMjOfpCBzrSUZD8
+# iB0TlzE/jgfIOjgPd4ZzCjANBgkqhkiG9w0BAQEFAASCAYBH2hPi3Zy5jdbTYSBg
+# A54EMtFm6IOJF4pvjqJ6QDj1tRakX4kMrofrGMSZKdB3ymeBxO3g+2h48hbhg0xf
+# O0GX/ZMY3GhOWOng6dQvQ7fTJ0KP1HPnkqJTit7C+10Y23h3VLkpcS2eFWVM2BoI
+# l0pLTb5qbw5oZlWCiGA0/aFDgwNO4PSHDhx99vHEVuCCOHnvYwoTKuvUVOwbfmB8
+# VcoxmfEFpWRwUfCe/VRh2zVEZ1CEto4yA3qWHDvQHxLCLPhOuPRqMiFOiadGYvE2
+# H68vAq5Isj+uFCDCgcI+Zy9/PwbAtRHHA/1mtGclfsbdluRSCVwgoRQN48dmh7h8
+# LlvMAyA/P+ImZE2XHidE3st/g2VlsOw0r7/sUIl+lybv8T1zi9xBehqnSZBbEk6T
+# LjhRvg42yxMCO7GBAyBT8/u5UY1927no7l2b8Xmvdt/W7C4XFKJOW0zPK+O6/2TZ
+# LIcoe8GAs2rjZl97PdeHrpxgWw28VNHfxkICd4ZGu0FP6zuhggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTgwM1ow
-# PwYJKoZIhvcNAQkEMTIEMHcRy7QMN/iSCrc5nPKV4AuYvxB4cwwFc+nuwhzOw6gJ
-# omEx4+br/WPUEUtkY5VvbTANBgkqhkiG9w0BAQEFAASCAgCP7sQOK5NpwPex0SoO
-# U9+kN+ohg0hKY6escKFQmRKIxRB6QwW2aYRqPSDdYSXuWrTPEDYo2HQY8Qd3oFkr
-# NAWWPEaBY5U/P8n/uglelFXf2+RnJt4K5yPmcL2IRvnGnbfZtXknEZtfNsoIkcFw
-# xKn1J2/7HO9Jd2SPx/PTuRQCKbtC8nuwr/TL1imtwFeV6FmMAofdz002CZJj5gLm
-# IHUHWmoYxUiKfbkzeCwIrdZomCxeFgwF9u9YSKxN8VOqzoCn+iM7dBIYvOTSs0kK
-# CnN7GaPu/uoTEUTqn+3YReLL9WA2dFjpiKKi+ANcD4M4kd+xIv9fDt7oSVlY0bmb
-# q5aQsSNMRO6HDwatz79kvd2GooARAnmaJElrfEhcUEwdiFXHIM0Sisf3fAMCYJaP
-# Q6KCsytz+JzH45DWi0oxi127TzX+bJdTbVJ0/JcSGA6GMrXhSUj+6VvHKScJ65jA
-# HK2TkBienD+7yRUvxEPVJJMgwAbb6sbb/ZWK6pXf4A3GqRgUiJnBWTL0jsQWjA2k
-# b0NTIdOBVbXN/YWfeY0ruIFk5huAQd5Oy/3eZAM0TxqHPxpPHPBvoL7herOop7oB
-# 0K782Rtaxx7U16lLQmpU3jFq+mN3OTIyHJXGw64sTA2F3HiToneMp4WGKirT6dT9
-# aDrGm/L5YGtU+V0SV/YsvkRk7g==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTgwNlow
+# PwYJKoZIhvcNAQkEMTIEMAQHQWEk/tkkg5BjHkjOIBtmqkM2m/LZwZyfWE6WH9Oz
+# rP+NbgpPb5MdU/danwyzajANBgkqhkiG9w0BAQEFAASCAgAR9Bvg+LO6iUZRtOhY
+# /96jzfkA+0XNeCIKEC9w50MzJyjG5URxc281Ol7MhKw5Zf1hEOETWOvQwj/c4pzW
+# j/gXAWwdc/yR+wRO0q4EiqcG9ARHo+8SU0Iqt9sa5JEUb154MZZZ91aF6cOgASa0
+# oq12M9tH0ofSRF37DT/6tlx8a2LVrt5PKGzyvT9MmG59IdbkBQWODC/p787225U8
+# IwPYR3NnwouSiAbEFBgGymQEjMVlvK0X4Uv/Hp3MqZz+LopE+cJqZoiMYN5TWjCu
+# b8++cO7qk7IZMGSzLlCmrinMN7onAu7R8fSBASunxx+ufjLFEhgmFGyM7EXAME4F
+# hd+7ryZBvKA+XI1FSY4CEZsIGdiBa3RV2VCRwH2epJarTd6LIkGMSchMhu0mc07n
+# HIj+Q6l+HDK2Z5Bj9qAwZXJ+ECzdvbJq+fU5Ih+ILjC7eg1wT9BydB27DYA/32jq
+# l8yWR4nDj/8ZkPWwjThahMadaQR3MRYhxtVdj1QnCf4QISJ/UHZqX5CUJjKYrgY7
+# BD0l2UyNzvJm7kw49IjpX0ywgCP1nXUK0ZUtZb03Ryq2+JJB/VQ67a2Ti4KGV8Co
+# ERqjir+xKnvRTW4CYcXzmPCCI1td2AsrfqBnS6WMKM9NTbh83RZ8PO1U/BEl8aef
+# daiG7qeCIorYrGY4ke7s8KWjWw==
 # SIG # End signature block
