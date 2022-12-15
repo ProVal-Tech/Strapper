@@ -11,6 +11,9 @@ Returns the working path of the current script using Strapper.
 ### [Get-UserRegistryKeyProperty](./docs/Get-UserRegistryKeyProperty.md)
 Gets a list of existing user registry properties.
 
+### [Get-WebFile](./docs/Get-WebFile.md)
+Downloads a file from a URI.
+
 ### [Install-Chocolatey](./docs/Install-Chocolatey.md)
 Installs or updates the Chocolatey package manager.
 

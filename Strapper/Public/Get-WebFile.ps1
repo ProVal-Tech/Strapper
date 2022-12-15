@@ -1,65 +1,40 @@
-@{
+function Get-WebFile {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)][System.Uri]$Uri,
+        [Parameter(Mandatory)][System.IO.FileInfo]$Path,
+        [Parameter()][switch]$Clobber,
+        [Parameter()][switch]$PassThru
+    )
+    Write-Debug -Message "URI: $Uri"
+    Write-Debug -Message "Target file: $($Path.FullName)"
+    if($Path.Exists -and !$Clobber) {
+        Write-Error -Message "The file '$($Path.FullName)' exists. To overwrite this file, pass the -Clobber switch." -ErrorAction Stop
+    }
+    Write-Debug -Message "Starting file download."
+    (New-Object System.Net.WebClient).DownloadFile($Uri, $Path.FullName)
 
-# Script module or binary module file associated with this manifest.
-RootModule = 'Strapper.psm1'
+    Write-Debug -Message "Refreshing FileInfo object."
+    $path.Refresh()
 
-# Version number of this module.
-ModuleVersion = '1.3.0'
-
-# ID used to uniquely identify this module
-GUID = '6fe5cf06-7b4f-4695-b022-1ca2feb0341f'
-
-# Author of this module
-Author = 'Stephen Nix'
-
-# Company or vendor of this module
-CompanyName = 'ProVal Tech'
-
-# Copyright statement for this module
-Copyright = '(c) ProVal Tech. All rights reserved.'
-
-# Description of the functionality provided by this module
-Description = 'A cross-platform helper module for PowerShell.'
-
-# Minimum version of the PowerShell engine required by this module
-PowerShellVersion = '5.1'
-
-# Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = @(
-    'Copy-RegistryItem',    
-    'Get-UserRegistryKeyProperty',
-    'Install-Chocolatey',
-    'Install-GitHubModule',
-    'Publish-GitHubModule',
-    'Remove-UserRegistryKeyProperty',
-    'Set-RegistryKeyProperty',
-    'Set-StrapperEnviornment'
-    'Set-UserRegistryKeyProperty',
-    'Write-Log',
-    'Get-WebFile'
-)
-
-# Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
-CmdletsToExport = @()
-
-# Variables to export from this module
-VariablesToExport = '*'
-
-# Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
-AliasesToExport = @()
-
-# Private data to pass to the module specified in RootModule/ModuleToProcess. This may also contain a PSData hashtable with additional module metadata used by PowerShell.
-PrivateData = @{ PSData = @{} }
-
-# HelpInfo URI of this module
-HelpInfoURI = 'https://github.com/ProVal-Tech/Strapper/issues'
+    Write-Debug -Message "Validating that file was downloaded."
+    if($path.Exists) {
+        Write-Debug -Message "Successfully downloaded '$Uri' to '$($Path.FullName)'"
+        Write-Information -MessageData "Successfully downloaded '$Uri' to '$($Path.FullName)'"
+        Write-Debug -Message "Checking if PassThru was set."
+        if($PassThru) {
+            Write-Debug -Message "PassThru set. Returning object."
+            return $Path
+        }
+    } else {
+        Write-Error -Message "An error occurred and '$Uri' was unable to be downloaded." -ErrorAction Stop
+    }
 }
-
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAns61MowfVpRV2
-# gsSe+t8x45pgVK4KW7ka6tcvt9patKCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAagXeOklJF+4a0
+# 4Vbe7WIeevvkSBwyutzg/O5R2ig+/6CCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -239,32 +214,32 @@ HelpInfoURI = 'https://github.com/ProVal-Tech/Strapper/issues'
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCChb9imAClCEOAvU9xkJhIk
-# 8dd82NikY2+H3j5Kv1oXDjANBgkqhkiG9w0BAQEFAASCAYA6/+cTExbHvLf4Yaf4
-# gFZ9BxezyPX0yobZ5C7PGnhFHNc3qdeRkAgHpfqShMFdnCFgRoe8RgW/w5nZ63TH
-# 7u+e7scMIrmZw54ge81PUYnxf519inD6P9cjGxKtXb3eRBQsG3twdVhoonIcZy/V
-# Lz2ANV5/ITxSdK9tGWIYhgZm0fhZiTQF7N4G0foeN0frHYBknjXpAnXs0lWB8DVQ
-# DqmmJZjchApmdDPRAb1HLclr6tN780tuEQS7Dw5OeBCTROwOtFfmvA0xCIVx/oJ0
-# YdFtYQZgAj/O5idXBGUDhnVcIDFd9hP8yzpTT8xLbTev6bZe7OLQf+SQPY9ix4br
-# otTRMzT7SCyJ17O/fcb9liA7lH/cdnZhwnW0FnXar99qBUsj6QmYwaxzM5vXlYJm
-# NJNnjLvXi11RRKIpOE1hUhondcHl9HWutnQUWoLp1Vea5SVluw/C7UlQ52tWiHti
-# oQWLlrrmA5hE6j2YXkh8IFoovbunwRLFA3g6Kk8JhfjRBSKhggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCB7JTSS8C5XKTHAMER1j82N
+# YlmBCqgu9SEZb4wsx5m6nzANBgkqhkiG9w0BAQEFAASCAYCJcyo91rgSsjGBh+T1
+# t1rsJAlDP0DZedyBMu4vMHddD4p3+cpf0MZAbz0G90wksXfuU+Iwvsy3+g7Fxmqg
+# SxqAkMuscTMOeHzcRBrGZnzy9Hk4/fWLQhN4VhqPWLbkVz9f8IGnQkNqmMRMBSXA
+# tWndR7Wm1Dj5FTrDdXufjrd4mrVGZPRegHXqPG3OiszJdc49kEbB/hHYxi7Oa4px
+# DcMNT91a87PpLCIcnN8zpjD+ZLVIk8MB5i08/7YXcd6lLfJn5vCnnbt8eScR65bf
+# vkuWWncXo9uN9Z4+slHDNUv+TTFokmH5kqa6yD23RqyVa2/Eo8rcGAY/N/XO3hLo
+# an7JQfKWjndGAeKIaBSnEsjDQ6Jq5Y+Oy2iE+oS8NR7cHTXpbuyuHb9vZdMBJGth
+# LkTSpgCdRq+RGsjmiWTASRaHBekPQxTKbwhquQBqbjlro8kw8YfQqsfjgdSYzxIs
+# scz1vix7BITnSTi33nQOXopPKhO9Cwlz399NZw1aRuMCB0ihggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTIwNDI0MFow
-# PwYJKoZIhvcNAQkEMTIEMC2nYHtvwB1q4B8s92qxVEDVTKX7V9y9FbQbG8wnwN9m
-# 3PRVIG4zB4N6QyTGCAizLTANBgkqhkiG9w0BAQEFAASCAgARNpGM63jx91Kb2+vH
-# PmweBIi6iu8JXf1Nc9mvTz4IyOJgVP8yQ/cYg5F9JVwT5oaB2OW4O/RU2xcT5ImX
-# x1eJmfy81bf+D8YF3eij+ucJ7ASuLevAoUvZ46gL1POblR2phffG8vwOUFHd5uB7
-# zgo6dMrqj+cIDAinFiqwoJLViw0YGOLpmMUzStTlM10RjJAgigX1SH0h5TGQXkWf
-# /BWnWs3dcE6xRdYYHFWwp2ALo2ZNxmRi9QqKMDcrcxTh1B3KmcnIadpTJw9QqdYo
-# pGWE8LS3rhr/5iac8B6GCbTt27tOf1gRZuYAqBFQC/bxGB0aNdsDe5YUIGDaG7n7
-# PqNejMcL6fe/Y0cbtD/LeKXvd5ItiPXt2Sn+5OLJ643tJSln28PeNhEilMOypdhd
-# Oi4Wq297rBhFnP3c88XCwNAgM9C75fv+Zt07IF+iwL1Zha5yw71Nx7aJ6eI8I1Ap
-# q3ozoSVGeCkgK0fMSmieo05Wni2vnQtmhrUaGoK1aFHFoY8pLhTOeYBzyIvlICC3
-# exkjV3rjC5lcSqRuH0/EkyMyzfPFnIP4myCjXxWXE4O7O2D1SwoLfhIdGuN3azYd
-# oM/w9IMtwps3s54NTo3dG3fV2/pduwyhrTCCut14sjDoBDyspOK1chF7hM2Nl+Rm
-# mjZsSK+pCEtNuRbMRRtFGLlbUQ==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTIwNDIwOFow
+# PwYJKoZIhvcNAQkEMTIEMGs2JRgsbd8rWvu+UKIcnys+U011K5G7XmFpadF/YWVN
+# LR0+Oa0wGcdFn4GgxBDIVDANBgkqhkiG9w0BAQEFAASCAgAQyEZrKZW6Kzg+Xyr3
+# Kb9khC6HWreqHdEcggztoRJF2RM0cOVzHZPy0isRLoYWbCADB2vl9S6rG2RNJD1b
+# JTu0c8e4FGDPmCMuOo+YxVuNcikz+kSiZt3shOVGJXsg9lE3EDjc7ifQfp48tInL
+# MD8OTnOztcaKdj4JGL2qn2AcuPoTMkm/3Gt+rpY9f2UBJiK+u5tB6jjwDiyy6Oov
+# +8Z1viPZAsxj/fwse0PrU5IOjZK9rSPqO2Cj+7Iaf3rqRzIM7wKVsHxGCLArewnI
+# 6inUMm6nS2et0cMWQ9LbkuMB09IgDoLSxpU0EZjDl0A7fDDXiWNC5GoAC2c0us0l
+# 6N60WnFfE8kDKlSDhrYSrbFEXNqXW0oDVt39xDuvDEk2Q8IdLM4NO5XmyypMmTLL
+# F3kyFpBLDgM900e9hiuUFFbDVv84DcpacYfnkQUDc49R7tjZii/fEFMROaFGRCjC
+# Bmq7bvZJUlqXFobUowIulmAyU9l9GStF4+lGgCplgltC07fTt7iGES2Gyw4plCqD
+# fx3bz0PRJLTlhjq255pibNkhnyimC70RBbYx11RIgpMaJ1sCkOKebF3qRIk2a9u7
+# vMeBbSEl2yq+VKRC4YYvgrH1rQDd7zmKY6/Dy/4A3/CY2g1DZOkZQ4jH9UraHsZg
+# WD2pZluzWPJjV3sGPz46i5gVlQ==
 # SIG # End signature block
