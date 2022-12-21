@@ -8,8 +8,17 @@ function Set-UserRegistryKeyProperty {
     .EXAMPLE
         Set-UserRegistryKeyProperty -Path "SOFTWARE\_automation\Strings\New\Path" -Name "MyString" -Value "1234" -Force
         Creates or updates a String registry property based on value type inference with the name MyString and the value of "1234". Creates the descending key path if it does not exist.
+    .EXAMPLE
+        Set-UserRegistryKeyProperty -Path "SOFTWARE\_automation\Strings\New\Path" -Username 'spike.spiegel' -Name "MyString" -Value "1234" -Force
+        Creates or updates a String registry property for the local user 'spike.spiegel' based on value type inference with the name MyString and the value of "1234". Creates the descending key path if it does not exist.
+    .EXAMPLE
+        Set-UserRegistryKeyProperty -Path "SOFTWARE\_automation\Strings\New\Path" -Username 'BEBOP\faye.valentine' -Name "MyString" -Value "1234" -Force
+        Creates or updates a String registry property for the domain user 'faye.valentine' based on value type inference with the name MyString and the value of "1234". Creates the descending key path if it does not exist.
     .PARAMETER Path
         The relative registry path to the target property.
+    .PARAMETER Username
+        The user to target for editing.
+        Should be in the format: <Domain Short Name or Hostname>\Username. If the domain and hostname are omitted, local user targeting will be assumed.
     .PARAMETER Name
         The name of the property to target.
     .PARAMETER Value
@@ -25,6 +34,9 @@ function Set-UserRegistryKeyProperty {
     param (
         [Parameter(Mandatory = $true)]
         [string]$Path,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Username,
 
         [Parameter(Mandatory = $false)]
         [string]$Name = '(Default)',
@@ -46,7 +58,7 @@ function Set-UserRegistryKeyProperty {
     if($StrapperSession.Platform -ne 'Win32NT') {
         Write-Error 'This function is only supported on Windows-based platforms.' -ErrorAction Stop
     }
-    
+
     # Regex pattern for SIDs
     $patternSID = '((S-1-5-21)|(S-1-12-1))-\d+-\d+\-\d+\-\d+$'
 
@@ -62,7 +74,12 @@ function Set-UserRegistryKeyProperty {
     } else {
         $UnloadedHives = $ProfileList
     }
-
+    if ($Username) {
+        if($Username -notmatch "\\") {
+            $Username = "$env:COMPUTERNAME\$Username"
+        }
+        $profileList = $profileList | Where-Object { $_.Username -eq $Username }
+    }
     # Iterate through each profile on the machine
     $returnEntries = @(
         foreach ($profile in $ProfileList) {
@@ -112,8 +129,8 @@ function Set-UserRegistryKeyProperty {
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCodJp0SNsgKjuN
-# RR+8RKB8fdfaZ0p8PZ+EPkzDhS0UbaCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBLrT5rSTjqg9gv
+# Teq0DWupFtN/snM8RbT9ZnWC3I2dVqCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -293,32 +310,32 @@ function Set-UserRegistryKeyProperty {
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCBi6gIGidlyrCwrkz9m1Y5k
-# 9ZgKzY4uZ/CvriuCmJQgPjANBgkqhkiG9w0BAQEFAASCAYAi7rBP1hIBDBUkGaTc
-# NEafMope8YxCWslgz+oYh5uBGC7P9rl0JDDYvfwpxa1UX8RCnSPuxXwMwrI/H7Hb
-# bp0exZBKnlegw11JCbphC/b2Qby579kxI5gmPCuUEdcr0AtUHZOHgSYj3n91Fri+
-# Vk06W0xlieKA00AbI6sc2V7lM9yX3LgHDx8ipm9sJoBJKKCcGMKTA7Ix2je4XJ7q
-# 4DrhPAzmGh5+/zw6uYPQgxQlk3I6o4YP9H1M443SK540Vig5H/QqdRUruvRrtdQ/
-# qdCvq7NC4v8ITNNWtiSUTKG3L/AkKjR2ldf4Je8SNlMXZ7hEEcrHeJF+T6Kg7j3i
-# cuNIMxhrieniLaf0Zpwd6M/4ZszGl6zAU2rF2alMMvSBk9Wpy/TbVaAJ7FNb8zHB
-# dW0K0redq6AhTTWtnd8xLOxSB76qEwHKbh/BTcxdMA2zsooqdv+47wv9NZgSrW/h
-# nhwFbzN62XfwrLrGuVrdqKE7r35yq7Jkg1He8vxMb0yVL6qhggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCDfLOq/MdmtVpXz/GeOFdBw
+# ehKUnwILdhrLo8LFuRYG9zANBgkqhkiG9w0BAQEFAASCAYB6WDHKqs3qwtGzZwgx
+# Os2h6PSlEzHtcj9AYg11+MhPQY/O3uvVz3CHo5SwdbyvEbCvY26VcUhI1htd7zd+
+# XYkZVIuASoiNtDnZ/53qvFxeoZDZA1+GtFBtFR26qhmOy0W29hZldsPVYVivo2b+
+# GGJE25058pprWfa0z148bC7BVy34XEnNBjmovSBhu3KL6yYx+DeOjS2XnSFcKjtY
+# xuxhtT707VJe5z8HghAYYT1DprWerHGlYZYzozmQZ1fsqEz5eU59WrwECIYLYM9p
+# cOtpXhaMo0SXpLKo1grCXim1xrDaK2by7xii5O4p811U/5K729+xk4DW2+TVK/mr
+# s26iTm86hlySx5+O/7nyLaAbpN998PtOV1Q7uR4xmi6xfvpk8+ZYiNUKQAcQ53p/
+# Hi/rZWcfKFEVOORLVjL6ZnUC5LyLtv1SlSXIWNcUgNQeGV9WyhC2Y5xFHqtkprn5
+# 4RoYRsqUAA6cPw7bWGwhuc7MvLfsKDkMbiO6XsKdGAeyEvahggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTg0Mlow
-# PwYJKoZIhvcNAQkEMTIEMM1wat4Y92/8ds3S/0o27YVf/DGA1TewB6+gPIoiz2/F
-# FlNwM/jNYvgbBWGAhkH+qTANBgkqhkiG9w0BAQEFAASCAgBTaH0pr3VWwoRw8Zsm
-# znEMStQqJdab4WrCjvX47Djb+r2WRFW9yAJ8Fvvg8YTaimf03wOCvsvb7XF548qh
-# 0+WRd6uEPbNyTm1uO+WsYhXPrdmkXmkZH4CT5wOc/ZoJ4CDfdbyY02FqjFuKCbIa
-# u+j+fAZVO2c3VRD5py6HRdGO2JSQGBjZd3oHkbzRmWUCsUgMqx1hZXPh2gOTQaUp
-# rXrDvilGLeXWzZNcI/DJytsq+6kIxru8cu2GtCsY5Mqqtx/qT1Ul4OxY+nBIBZP8
-# 3HBbLjC9UGByxPu085tFYslPtrvuQgaMf/9QBlLjQePGdcgtX+URjaIQPeu//p7F
-# 2Dsp43LqxcoHvK6lcEod7TBiYyE51/ktmtNreNUgjGQBTeF4vXxgJGrmSoKwXknx
-# 8Lhqimbc2MjhzXL2jfV4A6TEov8c5NUt9CiFyCizi54J2P2VoFip82XRvu8c3QXI
-# iduOezb2wyHQd15oFNCE9nnSZ4+TlRaYkJofySYaN/3mLvFdYvU2GNS55hSZKusY
-# MPyVdkxj4H+HK7ZMw1sQ4BN1V6TB2G+GS9erDyvIdjeODHPY5B7vcaE/+a+Dtq5E
-# jdx6CTHA/2D3lCKnzI/aZOltuMBM1X/ibVwd6IQgq6c107wCTBh/net8L6ClxwKI
-# r8CH77faimHgNdOhDJnDS959FQ==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIyMTIxNDAyMVow
+# PwYJKoZIhvcNAQkEMTIEMIOC3jzPc6PjA/HgwrmtyvBwfgmfMJXDqBsMLagFpd52
+# 1VF0wIsXkZLkmlMTGgY0uTANBgkqhkiG9w0BAQEFAASCAgBIWDbc76EVnUgXFSbL
+# 0/2B/wDgaHz9okYMrIIFJlHTDmrIEWoYxOIDELWZbduR27p9sSkkGsSs1Ooc7ETF
+# OOefUNWF2Ai+rNqtKjZIc9oxsFiWb9U6KyPijBieLuhuVK9zpvJRXg8NWueEBM03
+# FPhy5sngerBShKBnAdWD91eda143f7S7jnRR4UBPSq80rM4qPxwEUkyoWwnxishp
+# 56cSlzhiOb1+WgukzX736ANFlWeSxZWkygoQ4iEs5MV1vLeVN21Z+Sg7wEiUH0IU
+# njimuxTYjL81qmwFMTlVNZztM408viBvoH2Ok2mtcNfMdlk9r1BHCZ4FBFggX0aG
+# gLzDVctHrf0cBSH2EdChCdhLqTcKTzcIe9uX8l4RHL5x1C0EzzQdF+QmIEiOy7Zb
+# fnmiZGXgCPPQFbaR6TW0GJIRHTzygDC2YDcG39XlcwrjpcYX8Brmcp39p2v0qAE/
+# cZObFNoRKAfUlXMDJ3siC0NV+73LFjLRTMKCR0q6Gv87dS11Vh4eW8n85zbrq943
+# sZAniVwDItA8zxeWY6Wt1/pzhy+Sjq+x92G8vpbt2BhyWyLHh4rOq+/465QS73e7
+# jq9sdRubdYqF/5nDUcVz5dJezFGPnSnqdffvliTBvZ2CBKKXkBPNxF2vFIQTdZmc
+# 3DjpvwYivAsykCeRJmprIvmDmw==
 # SIG # End signature block
