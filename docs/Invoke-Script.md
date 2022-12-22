@@ -1,4 +1,4 @@
-## Get-WebFile
+## Invoke-Script
 ### Overview
 Run a PowerShell script from a local or remote path.
 
@@ -9,13 +9,13 @@ Run a PowerShell script from a local or remote path.
 Runs the PowerShell script 'C:\Users\User\Restart-MyComputer.ps1'.
 
 ```powershell
-Get-WebFile -Uri 'C:\Users\User\Restart-MyComputer.ps1'
+Invoke-Script -Uri 'C:\Users\User\Restart-MyComputer.ps1'
 ```
 
 Downloads and runs the PowerShell script 'Set-UserWallpaper.ps1', passing the given parameters to it.
 
 ```powershell
-Get-WebFile -Uri 'https://file.contoso.com/scripts/Set-UserWallpaper.ps1' -Parameters @{
+Invoke-Script -Uri 'https://file.contoso.com/scripts/Set-UserWallpaper.ps1' -Parameters @{
             User = 'Joe.Smith'
             Wallpaper = 'https://static.wikia.nocookie.net/vocaloid/images/5/57/Miku_v4_bundle_art.png'
         }
