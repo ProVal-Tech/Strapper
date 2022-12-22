@@ -11,6 +11,8 @@ function Get-WebFile {
     .EXAMPLE
         $mikuPath = Get-WebFile -Uri 'https://static.wikia.nocookie.net/vocaloid/images/5/57/Miku_v4_bundle_art.png' -Path 'C:\Temp\miku.png' -Clobber -PassThru
         Download the target PNG to 'C:\Temp\miku.png', overwriting it if it exists, and returning the FileInfo object.
+    .PARAMETER Uri
+        The URI to download the target file from.
     .PARAMETER Path
         The local path to save the file to.
     .PARAMETER Clobber
