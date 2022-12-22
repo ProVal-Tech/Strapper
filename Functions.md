@@ -20,6 +20,9 @@ Installs or updates the Chocolatey package manager.
 ### [Install-GitHubModule](./docs/Install-GitHubModule.md)
 Install a PowerShell module from a GitHub repository via PowerShellGet v3.
 
+### [Invoke-Script](./docs/Invoke-Script.md)
+Run a PowerShell script from a local or remote path.
+
 ### [Publish-GitHubModule](./docs/Publish-GitHubModule.md)
 Publish a PowerShell module to a GitHub repository.
 
