@@ -1,13 +1,13 @@
 function New-SQLiteObjectTable {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][ValidatePattern("^[a-zA-Z0-9\-_]+$")][string]$Name,
+        [Parameter(Mandatory)][ValidatePattern('^[a-zA-Z0-9\-_]+$')][string]$Name,
         [Parameter()][System.Data.SQLite.SQLiteConnection]$Connection,
         [Parameter()][switch]$Clobber,
         [Parameter()][switch]$PassThru
     )
-    $targetTable = Get-SQLiteTable -Name $Name
-    if($targetTable -and !$Clobber) {
+    $targetTable = Get-SQLiteTable -Name $Name -Connection $Connection
+    if ($targetTable -and !$Clobber) {
         Write-Verbose -Message "Target table '$Name' already exists. Pass -Clobber to overwrite this table."
     } else {
         Remove-SQLiteTable -Name $Name -Connection $Connection | Out-Null
@@ -20,10 +20,15 @@ function New-SQLiteObjectTable {
             PRIMARY KEY("id" AUTOINCREMENT)
         );
 "@
-        $createCommand.Parameters.Add([System.Data.SQLite.SQLiteParameter]::new('tablename', $Name))
-        
+        $rowsAffected = $createCommand.ExecuteNonQuery()
+        Write-Verbose -Message "Affected row count: $rowsAffected"
+        $targetTable = Get-SQLiteTable -Name $Name -Connection $Connection
+        if(!$targetTable) {
+            Write-Error -Exception ([System.Data.SQLite.SQLiteException]::new([System.Data.SQLite.SQLiteErrorCode]::IoErr, "Failed to create table '$Name'"))
+            return
+        }
     }
-    if($PassThru) {
+    if ($PassThru) {
         return $targetTable
     }
 }

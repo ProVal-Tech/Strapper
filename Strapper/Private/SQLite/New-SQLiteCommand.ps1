@@ -11,6 +11,8 @@ function New-SQLiteCommand {
     $sqliteParameters = $(foreach($key in $Parameters.Keys) {
         [System.Data.SQLite.SQLiteParameter]::new($key, $Parameters.$key)
     })
-    $sqliteCommand.Parameters.AddRange($sqliteParameters)
+    if($sqliteParameters) {
+        $sqliteCommand.Parameters.AddRange($sqliteParameters)
+    }
     return $sqliteCommand
 }
