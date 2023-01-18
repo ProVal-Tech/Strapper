@@ -1,9 +1,10 @@
-function Write-SQLiteObject {
+function Write-SQLiteJsonObject {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][ValidatePattern('^[a-zA-Z0-9\-_]+$')][string]$TableName,
         [Parameter()][string]$DataSource = $StrapperSession.DBPath,
-        [Parameter(Mandatory, ValueFromPipeline)][System.Object[]]$InputObject
+        [Parameter(Mandatory, ValueFromPipeline)][System.Object[]]$InputObject,
+        [Parameter()][int]$Depth = 64
     )
     begin {
         $objectList = [System.Collections.Generic.List[System.Object]]::new()
@@ -14,8 +15,9 @@ function Write-SQLiteObject {
         $sqliteCommand.Transaction = $sqliteTransaction
     }
     process {
-        foreach($obj in $InputObject) {
-            $sqliteCommand.CommandText = "INSERT INTO '$TableName' (json, timestamp) VALUES ()"
+        foreach ($obj in $InputObject) {
+            $jsonObjectString = $obj | ConvertTo-Json -Depth 64 -Compress
+            $sqliteCommand.CommandText = "INSERT INTO '$TableName' (json, timestamp) VALUES (:json, (SELECT datetime('now')))"
         }
     }
     end {
@@ -27,7 +29,7 @@ function Write-SQLiteObject {
         $sqliteDataAdapter.MissingSchemaAction = [System.Data.MissingSchemaAction]::AddWithKey
         $existingDataSet = [System.Data.DataSet]::new()
         $sqliteDataAdapter.Fill($existingDataSet, $TableName) | Out-Null
-        foreach($row in $parsedDataRows) {
+        foreach ($row in $parsedDataRows) {
             $existingDataSet.Tables[$TableName].ImportRow($row) | Out-Null
         }
         $sqliteDataAdapter.Update($existingDataSet, $TableName)
