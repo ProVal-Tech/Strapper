@@ -7,7 +7,6 @@ function Write-SQLiteJsonObject {
         [Parameter()][int]$Depth = 64
     )
     begin {
-        $objectList = [System.Collections.Generic.List[System.Object]]::new()
         [System.Data.SQLite.SQLiteConnection]$sqliteConnection = New-SQLiteConnection -DataSource $DataSource -Open
         New-SQLiteObjectTable -Name $TableName -Connection $sqliteConnection
         $sqliteCommand = $sqliteConnection.CreateCommand()
@@ -18,22 +17,15 @@ function Write-SQLiteJsonObject {
         foreach ($obj in $InputObject) {
             $jsonObjectString = $obj | ConvertTo-Json -Depth 64 -Compress
             $sqliteCommand.CommandText = "INSERT INTO '$TableName' (json, timestamp) VALUES (:json, (SELECT datetime('now')))"
+            $sqliteCommand.Parameters.AddWithValue(':json', $jsonObjectString)
+            $sqliteCommand.ExecuteNonQuery()
+            $sqliteCommand.Parameters.Clear()
         }
     }
     end {
-        [System.Collections.Generic.List[System.Data.DataRow]]$parsedDataRows = ($objectList | ConvertTo-ObjectDataRow)
-        [System.Data.SQLite.SQLiteConnection]$sqliteConnection = New-SQLiteConnection -DataSource $DataSource -Open
-        New-SQLiteObjectTable -Name $TableName -Connection $sqliteConnection
-        $command = New-SQLiteCommand -Connection $sqliteConnection -CommandText "SELECT * FROM '$TableName'"
-        $sqliteDataAdapter = [System.Data.SQLite.SQLiteDataAdapter]::new($command)
-        $sqliteDataAdapter.MissingSchemaAction = [System.Data.MissingSchemaAction]::AddWithKey
-        $existingDataSet = [System.Data.DataSet]::new()
-        $sqliteDataAdapter.Fill($existingDataSet, $TableName) | Out-Null
-        foreach ($row in $parsedDataRows) {
-            $existingDataSet.Tables[$TableName].ImportRow($row) | Out-Null
-        }
-        $sqliteDataAdapter.Update($existingDataSet, $TableName)
-        $sqliteDataAdapter.Dispose()
+        $sqliteTransaction.Commit()
+        $sqliteTransaction.Dispose()
         $sqliteConnection.Close()
+        $sqliteConnection.Dispose()
     }
 }
