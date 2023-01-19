@@ -15,7 +15,7 @@ function Write-SQLiteJsonObject {
     }
     process {
         foreach ($obj in $InputObject) {
-            $jsonObjectString = $obj | ConvertTo-Json -Depth 64 -Compress
+            $jsonObjectString = $obj | ConvertTo-Json -Depth $Depth -Compress
             $sqliteCommand.CommandText = "INSERT INTO '$TableName' (json, timestamp) VALUES (:json, (SELECT datetime('now')))"
             $sqliteCommand.Parameters.AddWithValue(':json', $jsonObjectString)
             $sqliteCommand.ExecuteNonQuery()
