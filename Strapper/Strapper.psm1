@@ -1,6 +1,5 @@
 $StrapperSession = [pscustomobject]@{
     LogPath = $null
-    DataPath = $null
     ErrorPath = $null
     WorkingPath = $null
     ScriptTitle = $null
@@ -16,7 +15,6 @@ if ($MyInvocation.PSCommandPath) {
     $scriptObject = Get-Item -Path $MyInvocation.PSCommandPath
     $StrapperSession.WorkingPath = $($scriptObject.DirectoryName)
     $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-log.txt"
-    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-data.txt"
     $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-error.txt"
     $StrapperSession.ScriptTitle = $scriptObject.BaseName
     $StrapperSession.LogTable = "$($scriptObject.BaseName)_logs"
@@ -24,7 +22,6 @@ if ($MyInvocation.PSCommandPath) {
     $StrapperSession.WorkingPath = (Get-Location).Path
     $currentDate = (Get-Date).ToString('yyyyMMdd')
     $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$currentDate-log.txt"
-    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$currentDate-data.txt"
     $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$currentDate-error.txt"
     $StrapperSession.ScriptTitle = '***Manual Run***'
     $StrapperSession.LogTable = "$($currentDate)_logs"
@@ -40,17 +37,27 @@ if ($StrapperSession.Platform -eq 'Win32NT') {
     $StrapperSession.IsElevated = $(id -u) -eq 0
 }
 
+$enums = @(@(
+    "$PSScriptRoot\enums\StrapperLogLevel.ps1"
+) | Get-ChildItem)
+
+$classes = @(@(
+    "$PSScriptRoot\classes\StrapperLog.ps1"
+) | Get-ChildItem)
+
 $publicFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" -Recurse )
 $privateFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1" -Recurse )
-foreach ($scriptImport in @($publicFunctions + $privateFunctions)) {
+foreach ($importTarget in @($enums + $classes + $publicFunctions + $privateFunctions)) {
     try {
-        . $scriptImport.FullName
+        . $importTarget.FullName
     } catch {
-        Write-Error -Message "Failed to import $($scriptImport.FullName)"
+        Write-Error -Message "Failed to import $($importTarget.FullName)"
     }
 }
 
-[System.Data.SQLite.SQLiteConnection]::CreateFile($StrapperSession.DBPath)
+if(!(Test-Path -LiteralPath $StrapperSession.DBPath)) {
+    [System.Data.SQLite.SQLiteConnection]::CreateFile($StrapperSession.DBPath)
+}
 
 Export-ModuleMember -Variable StrapperSession
 
