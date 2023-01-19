@@ -25,7 +25,6 @@ function Write-SQLiteJsonObject {
     end {
         $sqliteTransaction.Commit()
         $sqliteTransaction.Dispose()
-        $sqliteConnection.Close()
         $sqliteConnection.Dispose()
     }
 }
