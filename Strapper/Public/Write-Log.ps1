@@ -89,10 +89,10 @@ function Write-Log {
         ([StrapperLogLevel]::Fatal) {
             $levelShortName = 'FTL'
             if ($Exception) {
-                Write-Error -Message $Text -Exception $Exception
+                Write-Error -Message $Text -Category $ErrorCategory -Exception $Exception
                 break
             }
-            Write-Error -Message $Text
+            Write-Error -Message $Text -Category $ErrorCategory
             break
         }
         Default {
