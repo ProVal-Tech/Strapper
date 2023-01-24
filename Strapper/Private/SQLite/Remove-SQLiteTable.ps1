@@ -1,4 +1,17 @@
 function Remove-SQLiteTable {
+    <#
+    .SYNOPSIS
+        Creates a new SQLite table specifically designed for storing JSON representations of objects.
+    .EXAMPLE
+        New-SQLiteObjectTable -Name 'myscript_data' -Connection $Connection
+        Drops the table named 'myscript_data' if it exists.
+    .PARAMETER Name
+        The name of the table to drop.
+    .PARAMETER Connection
+        The connection to drop the table from.
+    .OUTPUTS
+        [int] - Should always return -1 if the table was successfully dropped.
+    #>
     [CmdletBinding()]
     [OutputType([int])]
     param (

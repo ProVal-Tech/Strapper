@@ -1,4 +1,22 @@
 function Write-SQLiteLog {
+    <#
+    .SYNOPSIS
+        Writes a log entry to a Strapper log table.
+    .EXAMPLE
+        Write-SQLiteLog -Message 'Logging a warning' -Level 'Warning'
+        Logs a warning-level message to the default Strapper datasource and log table.
+    .EXAMPLE
+        Write-SQLiteLog -Message 'Logging a fatal error' -Level 'Fatal' -TableName 'myscript_error'
+        Logs a fatal-level message to the default Strapper datasource under the 'myscript_error' table.
+    .PARAMETER Message
+        The message to write to the log table.
+    .PARAMETER Level
+        The log level of the message.
+    .PARAMETER TableName
+        The table to write the log message to. Must be a formatted Strapper log table.
+    .PARAMETER DataSource
+        The datasource to write the log message to. Defaults to the Strapper datasource.
+    #>
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)][string]$Message,    

@@ -1,4 +1,22 @@
+
 function Get-SQLiteTable {
+    <#
+    .SYNOPSIS
+        Get table information from a SQLite connection.
+    .EXAMPLE
+        Get-SQLiteTable -Connection $Connection
+        Returns information about all tables from the provided SQLite connection.
+    .EXAMPLE
+        Get-SQLiteTable -TableName mydata -Connection $Connection
+        Returns information about the mydata table from the provided SQLite connection.
+    .PARAMETER Name
+        The name of the table to retrieve.
+    .PARAMETER Connection
+        The SQLite connection to use.
+    .OUTPUTS
+        [pscustomobject] - The table with the specified name.
+        [pscustomobject[]] - All tables from the target connection.
+    #>
     [CmdletBinding(DefaultParameterSetName = 'All')]
     [OutputType([pscustomobject], ParameterSetName = 'Single')]
     [OutputType([pscustomobject[]], ParameterSetName = 'All')]
