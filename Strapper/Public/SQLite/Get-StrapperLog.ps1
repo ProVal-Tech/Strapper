@@ -1,4 +1,32 @@
 function Get-StrapperLog {
+    <#
+    .SYNOPSIS
+        Get objects representing Strapper logs from a database.
+    .EXAMPLE
+        Get-StrapperLog
+        Gets the Strapper logs from the "<scriptname>_logs" table with a minimum log level of 'Information'.
+    .EXAMPLE
+        Get-StrapperLog -MinimumLevel 'Error'
+        Gets the Strapper logs from the "<scriptname>_logs" table with a minimum log level of 'Error'.
+    .EXAMPLE
+        Get-StrapperLog -MinimumLevel 'Fatal' -TableName 'MyCustomLogTable'
+        Gets the Strapper logs from the "<scriptname>_MyCustomLogTable" table with a minimum log level of 'Fatal'.
+    .PARAMETER MinimumLevel
+        The minimum log level to gather from the table.
+        Highest --- Fatal
+                    Error
+                    Warning
+                    Information
+                    Debug
+         Lowest --- Verbose
+
+    .PARAMETER TableName
+        The name of the table to retrieve logs from.
+    .PARAMETER DataSource
+        The target SQLite datasource to use. Defaults to Strapper's 'Strapper.db'.
+    .OUTPUTS
+        [System.Collections.Generic.List[StrapperLog]] - A list of logs from the table.
+    #>
     [CmdletBinding()]
     param (
         [Parameter()]
@@ -25,13 +53,13 @@ function Get-StrapperLog {
     try {
         while ($dataReader.Read()) {
             Write-Verbose -Message "Id = $($dataReader.GetInt32(0))"
-            Write-Verbose -Message "Level = $($dataReader.GetString(1))"
+            Write-Verbose -Message "Level = $($dataReader.GetInt32(1))"
             Write-Verbose -Message "Message = $($dataReader.GetString(2))"
             Write-Verbose -Message "Timestamp = $($dataReader.GetDateTime(3))"
             $logList.Add(
                 [StrapperLog]@{
                     Id = $dataReader.GetInt32(0)
-                    Level = $dataReader.GetString(1)
+                    Level = $dataReader.GetInt32(1)
                     Message = $dataReader.GetString(2)
                     Timestamp = $dataReader.GetDateTime(3)
                 }

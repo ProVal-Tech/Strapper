@@ -38,8 +38,8 @@ function New-SQLiteLogTable {
         $createCommand.CommandText = @"
         CREATE TABLE "$Name" (
             "id"        INTEGER NOT NULL UNIQUE,
-            "level"     TEXT NOT NULL,
-            "message"   MESSAGE NOT NULL,
+            "level"     INTEGER NOT NULL,
+            "message"   TEXT NOT NULL,
             "timestamp" DATETIME NOT NULL,
             PRIMARY KEY("id" AUTOINCREMENT)
         );
