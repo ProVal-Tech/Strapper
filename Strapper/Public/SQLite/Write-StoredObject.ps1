@@ -1,4 +1,24 @@
-function Write-SQLiteObject {
+function Write-StoredObject {
+    <#
+    .SYNOPSIS
+        Write one or more objects to a Strapper object table.
+    .EXAMPLE
+        Get-Disk | Write-StoredObject
+        Writes the output objects from Get-Disk to the default "<scriptname>_data" table.
+    .EXAMPLE
+        Get-Disk | Write-StoredObject -TableName disks
+        Writes the output objects from Get-Disk to the "<scriptname>_disks" table.
+    .PARAMETER TableName
+        The name of the table to write objects to.
+    .PARAMETER DataSource
+        The target SQLite datasource to use. Defaults to Strapper's 'Strapper.db'.
+    .PARAMETER InputObject
+        The objects to write to the table.
+    .PARAMETER Depth
+        The depth that the JSON serializer will dive through an object's properties.
+    .PARAMETER Clobber
+        Recreate the table (removing all existing data) if it exists.
+    #>
     [CmdletBinding()]
     param(
         [Parameter()][ValidatePattern('^[a-zA-Z0-9\-_]+$')][string]$TableName,
@@ -9,7 +29,7 @@ function Write-SQLiteObject {
     )
     begin {
         [System.Data.SQLite.SQLiteConnection]$sqliteConnection = New-SQLiteConnection -DataSource $DataSource -Open
-        if(!$TableName) {
+        if (!$TableName) {
             $TableName = 'data'
         }
         $TableName = "$($StrapperSession.ScriptTitle)_$TableName"
