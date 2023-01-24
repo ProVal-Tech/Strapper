@@ -10,8 +10,9 @@ function Write-SQLiteLog {
     New-SQLiteLogTable -Name $TableName -Connection $sqliteConnection
     $sqliteCommand = $sqliteConnection.CreateCommand()
     $sqliteCommand.CommandText = "INSERT INTO '$TableName' (level, message, timestamp) VALUES (:level, :message, (SELECT datetime('now')))"
-    $sqliteCommand.Parameters.AddWithValue(':level', $Level) | Out-Null
+    $sqliteCommand.Parameters.AddWithValue(':level', $Level.ToString()) | Out-Null
     $sqliteCommand.Parameters.AddWithValue(':message', $Message) | Out-Null
     $rowsAffected = $sqliteCommand.ExecuteNonQuery()
+    Write-Verbose -Message "Rows affected: $rowsAffected"
     $sqliteConnection.Dispose()
 }
