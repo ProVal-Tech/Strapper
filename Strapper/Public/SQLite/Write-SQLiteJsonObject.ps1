@@ -1,7 +1,7 @@
-function Write-SQLiteJsonObject {
+function Write-SQLiteObject {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][ValidatePattern('^[a-zA-Z0-9\-_]+$')][string]$TableName,
+        [Parameter()][ValidatePattern('^[a-zA-Z0-9\-_]+$')][string]$TableName,
         [Parameter()][string]$DataSource = $StrapperSession.DBPath,
         [Parameter(Mandatory, ValueFromPipeline)][System.Object[]]$InputObject,
         [Parameter()][int]$Depth = 64,
@@ -9,6 +9,10 @@ function Write-SQLiteJsonObject {
     )
     begin {
         [System.Data.SQLite.SQLiteConnection]$sqliteConnection = New-SQLiteConnection -DataSource $DataSource -Open
+        if(!$TableName) {
+            $TableName = 'data'
+        }
+        $TableName = "$($StrapperSession.ScriptTitle)_$TableName"
         New-SQLiteObjectTable -Name $TableName -Connection $sqliteConnection -Clobber:$Clobber
         $sqliteCommand = $sqliteConnection.CreateCommand()
         $sqliteTransaction = $sqliteConnection.BeginTransaction()
