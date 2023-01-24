@@ -23,7 +23,7 @@ if ($MyInvocation.PSCommandPath) {
     $currentDate = (Get-Date).ToString('yyyyMMdd')
     $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$currentDate-log.txt"
     $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$currentDate-error.txt"
-    $StrapperSession.ScriptTitle = '***Manual Run***'
+    $StrapperSession.ScriptTitle = $currentDate
     $StrapperSession.LogTable = "$($currentDate)_logs"
 }
 
