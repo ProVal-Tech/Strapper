@@ -1,4 +1,22 @@
-function Get-SQLiteObject {
+function Get-StoredObject {
+    <#
+    .SYNOPSIS
+        Get previously stored objects from a Strapper object table.
+    .EXAMPLE
+        Get-StoredObject -IncludeMetadata
+        Gets the stored objects list from the default "<scriptname>_data" table, including the object metadata.
+    .EXAMPLE
+        Get-StoredObject -TableName disks
+        Gets the stored objects list from the "<scriptname>_disks" table.
+    .PARAMETER TableName
+        The name of the table to retrieve objects from.
+    .PARAMETER DataSource
+        The target SQLite datasource to use. Defaults to Strapper's 'Strapper.db'.
+    .PARAMETER IncludeMetadata
+        Include a Metadata property on each object that describes additional information about table name, insertion time, and row ID.
+    .OUTPUTS
+        [System.Collections.Generic.List[pscustomobject]] - A list of previously stored objects.
+    #>
     [CmdletBinding()]
     param(
         [Parameter()][ValidatePattern('^[a-zA-Z0-9\-_]+$')][string]$TableName,
