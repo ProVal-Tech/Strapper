@@ -11,7 +11,7 @@ function Get-StrapperLog {
     [StrapperLogLevel]$MinimumLevel = [StrapperLogLevel]$MinimumLevel
     [System.Data.SQLite.SQLiteConnection]$sqliteConnection = New-SQLiteConnection -DataSource $DataSource -Open
     if (!(Get-SQLiteTable -Name $TableName -Connection $sqliteConnection)) {
-        Write-Error -Message "No log table with the name '$TableName' was found in the database '$DataSource'"
+        Write-Error -Message "No log table with the name '$TableName' was found in the database '$DataSource'" -ErrorAction Stop
     }
     $sqliteCommand = $sqliteConnection.CreateCommand()
     $sqliteCommand.CommandText = "SELECT * FROM '$TableName' WHERE Level >= $($MinimumLevel.value__)"
