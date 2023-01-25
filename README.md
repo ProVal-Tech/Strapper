@@ -24,7 +24,7 @@ Install-Module -Name Strapper -Force
 ### Alternative Install
 
 ```powershell
-git clone "https://github.com/ProVal-Tech/Strapper" (Join-Path ($env:PSModulePath -split $(if(!$IsWindows) {':'} else {';'}) | Select-Object -First 1) "Strapper\1.3.0")
+git clone "https://github.com/ProVal-Tech/Strapper" (Join-Path ($env:PSModulePath -split $(if(!$IsWindows) {':'} else {';'}) | Select-Object -First 1) "Strapper\1.4.0")
 ```
 
 ## Usage
@@ -35,9 +35,6 @@ Strapper is primarily intended for use inside of another script, but it will wor
 # Import Strapper
 Import-Module Strapper
 
-# Writes to the log file
+# Writes to the log file, the Information stream, and the 
 Write-Log -Message 'It works!'
-
-# Writes to the log file and to the console.
-Write-Log -Message 'It writes to the console!' -InformationAction 'Continue'
 ```
