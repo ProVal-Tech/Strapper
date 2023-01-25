@@ -4,7 +4,7 @@
     RootModule = 'Strapper.psm1'
 
     # Version number of this module.
-    ModuleVersion = '1.3.3'
+    ModuleVersion = '1.4.0'
 
     # ID used to uniquely identify this module
     GUID = '6fe5cf06-7b4f-4695-b022-1ca2feb0341f'
@@ -31,6 +31,7 @@
     FunctionsToExport = @(
         'Copy-RegistryItem',
         'Get-StrapperLog',
+        'Get-SQLiteObject',
         'Get-UserRegistryKeyProperty',
         'Install-Chocolatey',
         'Install-GitHubModule',
@@ -40,7 +41,7 @@
         'Set-StrapperEnviornment'
         'Set-UserRegistryKeyProperty',
         'Write-Log',
-        'Write-SQLiteJsonObject',
+        'Write-SQLiteObject',
         'Get-WebFile',
         'Invoke-Script'
     )
@@ -55,10 +56,37 @@
     AliasesToExport = @()
 
     # Private data to pass to the module specified in RootModule/ModuleToProcess. This may also contain a PSData hashtable with additional module metadata used by PowerShell.
-    PrivateData = @{
-        PSData = @{
-        } 
-    }
+PrivateData = @{
+
+    PSData = @{
+
+        # Tags applied to this module. These help with module discovery in online galleries.
+        # Tags = @()
+
+        # A URL to the license for this module.
+        LicenseUri = 'https://github.com/ProVal-Tech/Strapper/blob/main/LICENSE'
+
+        # A URL to the main website for this project.
+        ProjectUri = 'https://github.com/ProVal-Tech/Strapper'
+
+        # A URL to an icon representing this module.
+        IconUri = 'https://raw.githubusercontent.com/ProVal-Tech/Strapper/main/res/img/strapper.png'
+
+        # ReleaseNotes of this module
+        # ReleaseNotes = ''
+
+        # Prerelease string of this module
+        # Prerelease = ''
+
+        # Flag to indicate whether the module requires explicit user acceptance for install/update/save
+        # RequireLicenseAcceptance = $false
+
+        # External dependent modules of this module
+        # ExternalModuleDependencies = @()
+
+    } # End of PSData hashtable
+
+} # End of PrivateData hashtable
 
     # HelpInfo URI of this module
     HelpInfoURI = 'https://github.com/ProVal-Tech/Strapper/issues'
@@ -67,8 +95,8 @@
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCsTPLeYKQfkUVE
-# PIQPh+4Lssu9wQZDF82pVK61tVT75aCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCDs1mQmdR4WOm4
+# AKS/rRr6DN2D7fb9Ib6D5iqsGio7qKCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -248,32 +276,32 @@
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCBHK4FH0SipwvT0+SeGH0MM
-# dfcFlJQIEUKo0HFSriUx/TANBgkqhkiG9w0BAQEFAASCAYC6VJ9HeN0hzIT5NfxN
-# IeUZhXt0+T0+Ar/Ct4kVTV1E1W5QRQl5LJojflJQeH5EaK6wXe4Wza/v08oYioiS
-# wtdDqPA2ChNtfi/UlyDv4phI1OyZzkm+xJQan+kNN4nn1bSaulHkPfkgDop72cUq
-# du7wtrVL+Oy1CEIFcISLGamkOkeXqG99Wcz9qmOTY0YsqvvSttznDmIEVgJQwGPO
-# 5LfVMLeY0HpVdIXhSW3JBq4Ofe92mNIg0hxSD6tv4KAUmysIE1mfeBneAyeLkskr
-# 6w54gm1vApaowLjsM6x1cbVXNYp9nHaU+FMPpol08xBJ5UWOkCDleHBKWbLtZif+
-# wFPe4gLM6Ec/MAwprEMFNLxFpstc14LQxOyrex0HYKAZCxrxPCSSvwZP1S7OWpZa
-# SeHDGtMYupE28T56dwzETjIbHi9nQk1yBgNLzEf5F7ec/qzVqgpv7SJhA+SWotKt
-# dA1tFDCgPdJRGh+5eRLjUSRH67mtS70BjogmWq/Ct9IFG+mhggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCDQFB0sSoG684IRqesRJlWK
+# e2x+reVNxultC8ZyKUhUYDANBgkqhkiG9w0BAQEFAASCAYBfpC1QDrmz5NO59RID
+# uOlmcq5akbNsVe6A6uEKCkEVDc7nGgx1dF6sP/a3eRgEig0KSWsXO00zbrxBYGjF
+# vLTkYmPpAHBLJs3o1vcAC2F97baBgwV4uJJKn6iTfCedpo/gjjadhjIGTniJpAvL
+# pBg503bFx/iApMbLILhz+IeqxqM0oOlIU597UmICuyocMCLq+wdMOgy9BBc1Ha98
+# 1UzriJSaTrMY1RIY6TELdzAwBnOS5oI7GhYPlxIfJijQz8ibgViGLgKm8nkP8EoS
+# Le0pUQsZC3cQ57Irm7K55pZcWA3ODIuc5uPUoZt5bw86g6ahf+XQiEfnVQ+JsA4C
+# dFhH3BSH18kE4gde7HD1GZkNx88eQFB0T0Y3BcxiYFk6oB7q1YwwsH95U9cZw7Dk
+# 1QuftnaSy+5B1fa3u5iyNACU91xbX0lbcRkleYdEN8OvdRfbLjq6iQPQzxbLW/By
+# rKd4SOlgLkvkMUBCdnOmzYhNOyk2B7zF2yTy60mwvIuNuBShggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIzMDExMjAwNTc0M1ow
-# PwYJKoZIhvcNAQkEMTIEMGB26KTpsQ6QZhzD8y4IIZDLc7+b62sNR0mM2ZMNgM9f
-# czuYaT2o44vY7jjpTksxIDANBgkqhkiG9w0BAQEFAASCAgBkIT4l6HoCfYkW0T0t
-# kIEsV0As++pdVZ0Ts0kmygSMwfNG5c7d60x8O2NRgoQL7GIPQ0CZUrh1hLVAbkXS
-# xdxOpmJNLLzpr1oweYhaTCnBUnle8idMQezw5gnWpF/WzuK1DdpDs8mu6WtDtSIk
-# pkEKWv5PXQzDf45Pii5U2U5++zlF4bQo32fzsl9REz0QLi9aWw7coaxTuGEbQxz3
-# XOLfdy9A7TVzsADPpwPEiwaYe5MbaylsysuQah5oMF1mI2+IgFK/KR+85pOl7xup
-# a2+mfvmzXydijB9EA3qgoN8GyxdHM11aCBAf4fxxltIZx++aRczjqTXYNfEuGYQH
-# Y5IWk3zV77z5nq5Oq9nqAPI6JJsQMk3YtZmbNA8N9qKqPAQWj3RbJtYAN3kv9z+U
-# 84DMTTN/8X5ZQZw+KD7CuKhU10+2X9GwhX7W/Ur3zfx6q3+xuE5/B2cJMDpRwABm
-# rcxsKLnXw8M47M0+ZASJJlbPGOed6mox6hcSzYNC3lxgM1YELhU+xIWNcn0TbcXU
-# nMujX2t8NBgTO8WLZZQmjQPtvh3XwJqmp6Y5FhD6exxjAUsjGBVIJjbKF0tz9GvY
-# SyxS5t+CfmUEp5eYaXmzj9eg2XvusnQ12DwlfEnZ4KrlrhVxAMU5e8mtjcLLH051
-# 2KWajOfbdFf7FbcqWKkQup7FUA==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIzMDEyNTA0MzQyNlow
+# PwYJKoZIhvcNAQkEMTIEMGmuAtgB7mdt/OJ6B+s7cBMXcFsCLIL2H8dKBU025jf5
+# kNPynEmt3ycb2urtSB/gsDANBgkqhkiG9w0BAQEFAASCAgA1GHUvXncsRO4lvyua
+# UPQ9wqQvevzSb6RQ7bNmanriZBFzw1N4JlHaXmkt/6/7FWqJ6G56PoX5/Jbm02ET
+# 5V4h4WCjdGa66hK4BjSaqmppInSvZH975FC2jkZKEN/MHdqXVBE9EbDPKiXz53R5
+# tPRp/LLw3m3BqOitu0njuS+keWeO66/qVIfn9aYA0mbxHbXV0tGETENnD88Jbn7s
+# ndGWxaJN6JFWePXU06P0g3qgDmxJTssG+Pz2kugFCOuFtsFExgZp18V0jCJuzZOT
+# ptyHueHGHKTZ10PiCKJhp+pkh5aywN7HkJr6VauhcwN2qKZGEwjvVDK+o64/Urb3
+# fYlt87GCPGf8GFsZqHmiEMTMjYB2GFWctpAA8xhiAdOgNC+FSPUtswrAMtC5DTh2
+# FcArYfTWv82NeqGRhSR+7Fe6CcRXd0QfU4DrsBmb5vCWT8UUFIfoGuw098FwMzXt
+# y169kPtLDyTI50qyF4XHGoA7nR71dGn+zOrjcw919QQ8LYLeLkSfXVjBzUJscwuR
+# BGV6u20N2WK9gPXG5u81dTR1V5G1XZslT1kViqaNX3b8TYJPV1r3htEHcoEstg4V
+# Wu/nlpHqgiprYqS/w+8m1XVUAQet7UgFxq+kkfYiLK9gjP1CaYA2R04XdxF1QpJe
+# VaBu1iilkMqvfSenPhWxQLCtIw==
 # SIG # End signature block
