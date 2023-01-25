@@ -22,7 +22,7 @@
     Description = 'A cross-platform helper module for PowerShell.'
 
     # Minimum version of the PowerShell engine required by this module
-    PowerShellVersion = '5.1'
+    PowerShellVersion = '5'
 
     RequiredAssemblies = @(
         './Libraries/SQLite/System.Data.SQLite.dll'
