@@ -1,51 +1,16 @@
-function Write-LogHelper {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = $true, ParameterSetName = 'String')]
-        [AllowEmptyString()]
-        [string]$Text,
-        [Parameter(Mandatory = $true, ParameterSetName = 'String')]
-        [string]$Type
-    )
-    $formattedLog = "$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))  $($Type.PadRight(8)) $Text"
-    switch ($Type) {
-        'LOG' {
-            Write-InformationExtended -MessageData $formattedLog
-            Add-Content -Path $StrapperSession.logPath -Value $formattedLog
-        }
-        'INIT' {
-            Write-InformationExtended -MessageData $formattedLog -ForegroundColor White -BackgroundColor DarkBlue
-            Add-Content -Path $StrapperSession.logPath -Value $formattedLog
-        }
-        'WARN' {
-            Write-InformationExtended -MessageData $formattedLog -ForegroundColor Black -BackgroundColor DarkYellow
-            Add-Content -Path $StrapperSession.logPath -Value $formattedLog
-        }
-        'ERROR' {
-            Write-InformationExtended -MessageData $formattedLog -ForegroundColor White -BackgroundColor DarkRed
-            Add-Content -Path $StrapperSession.logPath -Value $formattedLog
-            Add-Content -Path $StrapperSession.errorPath -Value $formattedLog
-        }
-        'SUCCESS' {
-            Write-InformationExtended -MessageData $formattedLog -ForegroundColor White -BackgroundColor DarkGreen
-            Add-Content -Path $StrapperSession.logPath -Value $formattedLog
-        }
-        'DATA' {
-            Write-InformationExtended -MessageData $formattedLog -ForegroundColor White -BackgroundColor Blue
-            Add-Content -Path $StrapperSession.logPath -Value $formattedLog
-            Add-Content -Path $StrapperSession.dataPath -Value $Text
-        }
-        Default {
-            Write-InformationExtended -MessageData $formattedLog
-            Add-Content -Path $StrapperSession.logPath -Value $formattedLog
-        }
-    }
+enum StrapperLogLevel {
+    Verbose = 0
+    Debug = 1
+    Information = 2
+    Warning = 3
+    Error = 4
+    Fatal = 5
 }
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAPz1vAo3JvEws8
-# BgWjxPnd4Iequ28Jt11FbqJVrFjqAKCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDKL3AAKkQg2/MV
+# FipJXlnRIAB4OmPBmi1a+i15bonI06CCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -225,32 +190,32 @@ function Write-LogHelper {
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCAez1RbK0fh/0UaW62wq3he
-# XyNZMO70OzN3omKPulG1hTANBgkqhkiG9w0BAQEFAASCAYBkXwp0cY8AJFARllPJ
-# qUDAtctLf5sds3+YW3hliGsCJjvQvmxu4TshNSOPgs20mcvzn9M8rO1uVhEM0EtA
-# xT8Mr2OuLTZRl3Ny2mdK8rSn8yvg/CvxcFq9ohJCtEr4ReutkQf3iVmK5Wwdl41o
-# zK3WIcW9/X3ssXlPMj6LBzj+jfyqdhr9asCWoQliCGmZTHhrtZCY5t2ZuUjE/8GK
-# tJGmQHqYOKW+EdD0lG4YO9oCOSkB0tfXvJq12Ea63Nl/y5zL1RXk3G6iQ0//wNmO
-# Gw1rABBiRanxumIn8RPHWR9a6vimvCzkdEaQjnA74QjVXXd6yAjmqdD183DwKB+v
-# qGaSonyzMio18NpgilSEL6iBf54RlGPRULUo0jihSRNNTVMuaC0u81HXlFj7vdxS
-# wdJ8p1mLGRj/SFRY0MUbz4XwDHR0rtJ3E4aGqUwi0eNYlCpOe8qHX5ZfGgldwgt7
-# mKiDR1P8UeRvFlfzHDcrOD3ZtqzQq91zh9sk8IVVrn5bKZehggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCA9tbx5pa1uun0BpnB8YufI
+# x2obvlXDGUpTdeDPvcyvlzANBgkqhkiG9w0BAQEFAASCAYCLSBgjtXtLxGblLCs7
+# hKeTbRC1L28PDFJQpWLQfD9v4rFuDEzKAYGPYgGnaHdRtP6Rls62ssEr40bEqGfw
+# 2pvzo3O9Qg6ljnF6hGr0Oq/n1iMaHCZTtDikaDd8y67O2GRDzfqzCwJO/ZayS7Gg
+# l63DJQQVCIAOxoFiF4gG7YXgajaq+Ywao/+ZHktPerLmGNmZKWP2hRjI5Uvs9fQc
+# XBMNv1kd1kdPr9nwt+HByDdtkI1bwk1haKLalEx2sHlknt4/3+uHFGJP9bIkLQTW
+# CjIpm0luO0lIwK/pnzFVqz5u4q2TahncQByAqwTNtx17d2DvGoK8MsaVGdLSP7cS
+# qmpTj751j3cALkw8yy/SWJoN1yg1tNwNKxk7hJdSPgkDBfX3u4cWJ+YFg3hvZuKS
+# cWgyaTGDOvE4tpT47H+aWdoP1T17lLCccKD8ebSnNyzsC84xxggtAkGJGWmf852L
+# 9OE2KGFo+CyQYH2Kgt0Da+xNihwD30VUzTwWu+PRyz5Cz2KhggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTgwOVow
-# PwYJKoZIhvcNAQkEMTIEMIy38VN/+86EvznVg1gJPnTOzc/msnOrOHafj3cALEO7
-# dZEY2nw9rWnCM9LYYlxHGDANBgkqhkiG9w0BAQEFAASCAgAIztS1no2Ri5jKMUZ5
-# U8RUzyDJC2BV71gtGocWyB21qLhF+0pkGoxY5Sd9jJnthDOmwDt6HAiPhhN7KrxI
-# d6lbfYXchmo/uR1blWjEZJ9S9PhtEv1MbHcCbyTUt8pjTUpTtzNjmt57UzFkfmoJ
-# wksC+CvtPCiamsOgsu+AMkvVSuiz9h47TxBVNSIH3UyrTd4C9QHHZToOfEMotfA7
-# JZvdHq9wEoaCdzN+6bYKhy6f7i4oq/pHpdsddXq9dUXsxWC47tKNXRyt7wU7txWt
-# NgjY7gFlXDxBDSw4YznOtjFkc2ma+kxH7yS5hiUIED6N/z1m7KSjS+PebIKgJthW
-# HXk59Q/PXTpLfBVFX+aVhPyBvceroCpTRBlV3uLDy6FarAFkW0EjHerBY6dku4jW
-# zpxqgEJq/7HZED2ob6JN+mbogC8PtC8MlSK5/4Zc2WSzUtKemEoVmi7DWNoLCtDV
-# 9ICFeAd0PD7aKEosgjLXLk6AWCHBrAFNd/FlwHfwTNH2GG2y8LpANBhywvYU1WnV
-# wL264tpjSBYInT5VQRhM+h2931Wj+1Af0MiXzPgt9RR8TW89Of3VoAvvdhfMHluq
-# dt2a01KDDZY1Ls3fobGtHodoCLEA3LgBITHEAj97TxZvnLLKCQNdHD+ERpwNJj7f
-# BbJJJjgfmgmdo6Sz6v3/67MsLg==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIzMDEyNTA0MzQzNVow
+# PwYJKoZIhvcNAQkEMTIEMAxyN1BF59k7XtKpjwXHhCwPiYBMuyFAffpG4rLwCLuA
+# bUZhO7C/yaSYuNGUJl//qjANBgkqhkiG9w0BAQEFAASCAgAm4PE5WocBomx3WyXM
+# OQs6NqGjyX0wT0CVyfxJeMfuLFhR8s7s5S+YqxHQ43xbX4+QO0rmSRGW1YHF2z/S
+# zrcfQ/YqawLEaVTeYbN1whH0UUn/dx6QivxFz+m0gmBDMmnrxErq7p15aGbJGedj
+# Ix1zqqjR0hL8K0uqnl5/+x3ePkcmls28/wI6tZVIlW7H1c7zbBafvdAgIgggQ1WQ
+# j2va1HzMoAz/6P/idlWTY7+oW7bQ/qPmlDkS677YHAdIlZF1AFZ6QnvJsjzMXnCt
+# t06gmVCSDXfXVqkX+0Uloev/0Or6vvqY6SFeGdGBnFa9yvKJIXuPeiuGxFDq5xMo
+# MjegruTX2PdE+mhM9dPMBeK8hvAowbubGnVOum3tsZiu9doPAUg108dvC1NBWogn
+# 3a7FMcADp0xMYlJcKYaeTAqtf+hpsRvawlwZ0j+HBVgvI7lldoCmMRbMMbbUoWUb
+# 2iOHwiVfSC8wDSeb0sy0AyYh2niARW4iFFovjCBcjVaV3QGbGvBIes2SOOCRDzA2
+# TnBXQSy5b2G8Rb39+StRM6d7PjvLsGn2YPs9RKQzIH8WuluZuVuuf4KqixDdWXeP
+# 6rZRhMMIF+zEfaIUdNh8pzFcAQfnMXh0uaqBG+Wvok90D3pGjcfGWK3Qy6UEPqWH
+# Rbd4htjV7o/cRmyzRGPox+KHfA==
 # SIG # End signature block

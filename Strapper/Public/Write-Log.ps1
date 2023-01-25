@@ -7,52 +7,111 @@ function Write-Log {
         This will write an error to the console, the log file, and the error log file.
     .PARAMETER Text
         The message to pass to the log.
-    .PARAMETER StringArray
-        An array of strings to write to the log.
-    .PARAMETER Type
-        The type of log message to pass in. The options are:
-        LOG     - Outputs to the log file and console.
-        WARN    - Outputs to the log file and console.
-        ERROR   - Outputs to the log file, error file, and console.
-        SUCCESS - Outputs to the log file and console.
-        DATA    - Outputs to the log file, data file, and console.
-        INIT    - Outputs to the log file and console.
-        Default (Any other string) - Outputs to the log file and console.
-    .NOTES
-        If this function is run on the console then it will output a log file to the current directory in the format YYYYMMDD-log/data/error.txt
+    .PARAMETER Level
+        The log level assigned to the message.
+        See https://github.com/ProVal-Tech/Strapper/blob/main/docs/Write-Log.md#log-levels for more information.
+    .PARAMETER Exception
+        An Exception object to add to an `Error` or `Fatal` log level type.
+    .PARAMETER ErrorCategory
+        An ErrorCategory to add to an `Error` or `Fatal` log level type.
+    .LINK
+        https://github.com/ProVal-Tech/Strapper/blob/main/docs/Write-Log.md
     #>
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'Level')]
     param (
-        [Parameter(Mandatory = $true, Position = 0, ParameterSetName = 'String')]
-        [AllowEmptyString()][Alias('Message')]
-        [string]$Text,
-        [Parameter(Mandatory = $true, Position = 0, ParameterSetName = 'StringArray')]
+        [Parameter(Mandatory, ParameterSetName = 'Type')]
+        [Parameter(Mandatory, ParameterSetName = 'Level')]
         [AllowEmptyString()]
-        [string[]]$StringArray,
-        [Parameter(Mandatory = $false, Position = 1, ParameterSetName = 'String')]
-        [Parameter(Mandatory = $false, Position = 1, ParameterSetName = 'StringArray')]
-        [string]$Type = 'LOG'
+        [Alias('Message')]
+        [string]$Text,
+        [Parameter(Mandatory, DontShow, ParameterSetName = 'Type')]
+        [string]$Type,
+        [Parameter(Mandatory, ParameterSetName = 'Level')]
+        [ValidateSet('Verbose', 'Debug', 'Information', 'Warning', 'Error', 'Fatal')]
+        [string]$Level,
+        [Parameter()]
+        [System.Exception]$Exception,
+        [Parameter()]
+        [System.Management.Automation.ErrorCategory]$ErrorCategory = [System.Management.Automation.ErrorCategory]::NotSpecified
     )
-    if (!($StrapperSession.logPath -and $StrapperSession.dataPath -and $StrapperSession.errorPath)) {
+    if (!($StrapperSession.LogPath -and $StrapperSession.ErrorPath)) {
         $location = (Get-Location).Path
-        $StrapperSession.logPath = Join-Path $location "$((Get-Date).ToString('yyyyMMdd'))-log.txt"
-        $StrapperSession.dataPath = Join-Path $location "$((Get-Date).ToString('yyyyMMdd'))-data.txt"
-        $StrapperSession.errorPath = Join-Path $location "$((Get-Date).ToString('yyyyMMdd'))-error.txt"
+        $StrapperSession.LogPath = Join-Path -Path $location -ChildPath "$((Get-Date).ToString('yyyyMMdd'))-log.txt"
+        $StrapperSession.ErrorPath = Join-Path -Path $location -ChildPath "$((Get-Date).ToString('yyyyMMdd'))-error.txt"
     }
-    #Optimize-Content -Path $script:logPath
-    if ($StringArray) {
-        foreach ($logItem in $StringArray) {
-            Write-LogHelper -Text $logItem -Type $Type
+
+    # Accounting for -Type to allow for backwards compatibility.
+    if (!$Level) {
+        switch ($Type) {
+            'LOG' { $Level = [StrapperLogLevel]::Information }
+            'WARN' { $Level = [StrapperLogLevel]::Warning }
+            'ERROR' { $Level = [StrapperLogLevel]::Error }
+            'SUCCESS' { $Level = [StrapperLogLevel]::Information }
+            'DATA' { $Level = [StrapperLogLevel]::Information }
+            'INIT' { $Level = [StrapperLogLevel]::Debug }
+            Default { $Level = [StrapperLogLevel]::Information }
         }
-    } elseif ($Text) {
-        Write-LogHelper -Text $Text -Type $Type
+    }
+    
+    switch ([StrapperLogLevel]$Level) {
+        ([StrapperLogLevel]::Verbose) {
+            $levelShortName = 'VER'
+            Write-Verbose -Message $Text
+            break
+        }
+        ([StrapperLogLevel]::Debug) {
+            $levelShortName = 'DBG'
+            Write-Debug -Message $Text
+            break
+        }
+        ([StrapperLogLevel]::Information) {
+            $levelShortName = 'INF'
+            Write-Information -MessageData $Text
+            break
+        }
+        ([StrapperLogLevel]::Warning) {
+            $levelShortName = 'WRN'
+            Write-Warning -Message $Text
+            break
+        }
+        ([StrapperLogLevel]::Error) {
+            $levelShortName = 'ERR'
+            if ($Exception) {
+                Write-Error -Message $Text -Exception $Exception -Category $ErrorCategory
+                break
+            }
+            Write-Error -Message $Text -Category $ErrorCategory
+            break
+        }
+        ([StrapperLogLevel]::Fatal) {
+            $levelShortName = 'FTL'
+            if ($Exception) {
+                Write-Error -Message $Text -Category $ErrorCategory -Exception $Exception
+                break
+            }
+            Write-Error -Message $Text -Category $ErrorCategory
+            break
+        }
+        Default {
+            $levelShortName = 'UNK'
+            Write-Information -MessageData $Text
+        }
+    }
+    $formattedLog = "$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss.fff zzz')) [$levelShortName] $Text"
+    Add-Content -Path $StrapperSession.logPath -Value $formattedLog
+    if ($Level -ge [StrapperLogLevel]::Error) {
+        Add-Content -Path $StrapperSession.ErrorPath -Value $formattedLog
+    }
+
+    if($StrapperSession.LogsToDB) {
+        Write-SQLiteLog -Message $Text -Level $Level
     }
 }
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDjyLcVptgAZru+
-# eKZMNJYD3fngdo7FKdx6RNlZwjZszqCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDqxlgprhUshHZk
+# fqTBLONztlwW0E/NIv8BummU41aWV6CCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -232,32 +291,32 @@ function Write-Log {
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCDd5ERu4FxA1pLZcHb/kYHI
-# Axk85zdGsb/n3FoqPA9tzTANBgkqhkiG9w0BAQEFAASCAYBXo207a2JY3vQ5Vrh3
-# Qj8qtbcXUfbxFedxwQN9mqOpJdxK7AtL2dIacv5xTCMRc7Im7UTn8q9FjL2liCCk
-# 27Jka9pSVVdvI1QhU/RoIKVNRAL7JfHM6iLf5/TQuE4h25VmZNTMDdEQoA3Eaz+T
-# qJqajUTDcGVeFTmdFJWpRXk7IwZkUVUqZ1DYTZt96y6UVarIdokFhX9amM581Tvd
-# DIiHv4iFD9ptGY2rbkYFbYec6XydYo5MCUwE4ueQezvh4Oiz90CS2UOp0UUJI7SE
-# IrMZtomgZvs7LpmRQVAn7B9ALDLwxJRrKA+PebQApRAusqtrx0ICNr+I/UqZNF2y
-# OjzzTXoMGEIix2fisgTTJQ2riM/G2vRF+Zq0rdZ211PbtCtJGXE1X7+/u5PBSND5
-# AHEH1IxRqYmfx0LLF/BGJoOfWBD5EnkW5XBBLBqR7WkPzWDQf2wHfsDjFXEyLTUW
-# BrCCGMAWwLzmoXFgCBzLaP8cGiIzRA8gIYhu0qnYif3/deqhggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCCIrb1Vv/nQdfHVtvtrAdL7
+# jgfJtWOqqHVgDyciCyhh/TANBgkqhkiG9w0BAQEFAASCAYB0uzqvpozAEHSzkORJ
+# TRP+SMOUkLpyD3WLVATsfiV1PayM2c9CIEUqrkK7G8hsgFXnRz+R45vINi9uO+q5
+# rlIhZdZNbraHghZZdMcHpBLEjbZM5epWjxce2ohJRt2KlV7c8owr9hT267Yo96wR
+# ZCpRz8YmM6tCtJHL9+N2g5l85mr/t/6mJ0rAua0kcnSppJ3jqiuQzB7VPyWJu2W7
+# HflUORWFgF4lP+1qCwaUylyizixZn8oLpPTcq6D+drGMulml0TSNhc6uVeVFF+Jf
+# eEi6p9bcZoGLgxuDaMmnmuGvZ+H5pBaPw4RCGm3/EILSuQy8bdxj8XBlksZCOPuD
+# MgVBe5Q+772JI3dRH3YSNRfRrBEU6rTSMQMIchsFKwwcxLqgSNraRe7UqhhByZfI
+# iWwZCzumxkynMJrZkviYHu78Cwx9KqS9EVCH6cH0LXjYmlmS2JJuno3/gZHkRHPN
+# 9hfeegoZkzawQBT+5hossP1jZMlLN+7x5Pt5oei3vb5U0XShggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTg0NVow
-# PwYJKoZIhvcNAQkEMTIEMEG+GY+l28W3hE89I/RQjLiticx729jVC47Jec5NZs3g
-# QOUOVklqH2L2alvkdzfr2jANBgkqhkiG9w0BAQEFAASCAgAPj7Z7olG4EubOB3yh
-# 84ncntuHWXrVXNbBB3SLV1kZPKFXlcVu7oSX/xKgyV55v5QPGtUMoR27HkGF0MgX
-# TVI5VhG4AtGPnhLgCRs1lRu45vW4IebvlL+DyOkQT/M/my7+bJ0oPrO1xyFD7uMQ
-# qIPSW17ObZ3AG4s56umLitfWBowx//9n54kt0Qm+Xsx10T2xVrw5ZWzFZP9mDgSU
-# Rdkp07XsAbaLiV83i1P1pc/axeW6HFne5QifuwxfEkkATemaNHsjtJUIMGKQtyAe
-# eqakAT26SKdZ22m7JE1wcr6l1EtJFZ6ZZjPwopIh4c06T+uOH67dQtAqSw9UxLMy
-# vpwaMrp+72UVIr2+8pnZ6wu5y6UzNVml3PkJ2EqJiUEEZbEAKRABrBtgcuuTaJ39
-# QdBdfw+b2x3+iBdEYunw/oW3VnBfDB3+vxBhuf+CTTHleM8dAkrPY2bSr9g2pi0y
-# vzzAATDRy1i09lXVylEeBIJPX31oNVNoul4drZZoMVQi4YONNzg4uwGlIDc0C2ZC
-# 2eF1QpZ3A5IgQjP9wtcYHItawS7RV2O+Kwr8TGrNYmTpDf9tj14AJ0+AaodFxKoW
-# QhFCD8gWn5PjWI14DqPOK7wZktkGJQlJTJB48tmOL3K1LWcB0DKx3NSGnZLFiMOC
-# D9c7BAfga+HS5owDv23mfIMuSQ==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIzMDEyNTA0MzQ1OVow
+# PwYJKoZIhvcNAQkEMTIEMAkyu1M1TwXap+/lA94tdB6LAvU6cGExaWN16bFl47fz
+# j3ZD80YLgKSIqvrX+eVLRzANBgkqhkiG9w0BAQEFAASCAgB6VQRCQ6YaHyssETi6
+# /UE3+X+VrKtrmPsOVjHAYR8a89s6Ve54qQ1AUDx6JoFAPXqJGoaOBnlUhbalYxNG
+# recYcUAFhiDSEPU4W3ONNtV/BRY6c2O0eWZkkOz9v5tCnx/QMMZHZ2wdaxYSvaEG
+# px+rNq9s1h/3/ztK2xwIbD4n7WiFcsgrdUHohdWaFU8mY8M7xBLWp5fLmRlupzU2
+# itdagWPHx7J4aGlF4/akXfheQOgJiuI0pjCIeRjnCTsbfeCUVybDRf1jFxIemcYI
+# JNGRwHY2dxkr/vPILHnCFx2jNbJRgnOBT+i0wzu8GJyZi15t+1O9YmssSih+0oBR
+# bDJ1caUrmWRoRWo0LwSwECyTH0phR8chss1SPyeBqNBodRrhX7McFeERVLdrH+Ko
+# Y2B4PGhIMZa7vPraw0nbXHT8DNFEBYSKnYZTrw2bHGKcdCrj9efbAVO8txm6kJEZ
+# aUWqEa/NUdMhktZLYT41XXW3LNZG5iZZuuDoNE5thq4iCERWRrEqd6HYLyP627/Z
+# 5rSSQ1WoLu2JMjacyotoYSdm6rcgJOy5ADLKCNAeF8elyZJzNl9EcpMCXrTAkf53
+# 6HRFIxhMjpX+OxMM+a/nqxPu//wCMpqwNdQF53YCYAp9ntQXvJ19rQXMJUcs+tLj
+# MP7GbQnnZA9Fp+ZQf3zyNaA88w==
 # SIG # End signature block

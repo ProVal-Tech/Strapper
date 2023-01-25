@@ -1,102 +1,102 @@
-@{
 
-    # Script module or binary module file associated with this manifest.
-    RootModule = 'Strapper.psm1'
-
-    # Version number of this module.
-    ModuleVersion = '1.4.0'
-
-    # ID used to uniquely identify this module
-    GUID = '6fe5cf06-7b4f-4695-b022-1ca2feb0341f'
-
-    # Author of this module
-    Author = 'Stephen Nix'
-
-    # Company or vendor of this module
-    CompanyName = 'ProVal Tech'
-
-    # Copyright statement for this module
-    Copyright = '(c) ProVal Tech. All rights reserved.'
-
-    # Description of the functionality provided by this module
-    Description = 'A cross-platform helper module for PowerShell.'
-
-    # Minimum version of the PowerShell engine required by this module
-    PowerShellVersion = '5.0'
-
-    RequiredAssemblies = @(
-        './Libraries/SQLite/System.Data.SQLite.dll'
+function Get-SQLiteTable {
+    <#
+    .SYNOPSIS
+        Get table information from a SQLite connection.
+    .EXAMPLE
+        Get-SQLiteTable -Connection $Connection
+        Returns information about all tables from the provided SQLite connection.
+    .EXAMPLE
+        Get-SQLiteTable -TableName mydata -Connection $Connection
+        Returns information about the mydata table from the provided SQLite connection.
+    .PARAMETER Name
+        The name of the table to retrieve.
+    .PARAMETER Connection
+        The SQLite connection to use.
+    .OUTPUTS
+        [pscustomobject] - The table with the specified name.
+        [pscustomobject[]] - All tables from the target connection.
+    #>
+    [CmdletBinding(DefaultParameterSetName = 'All')]
+    [OutputType([pscustomobject], ParameterSetName = 'Single')]
+    [OutputType([pscustomobject[]], ParameterSetName = 'All')]
+    param (
+        [Parameter(ParameterSetName = 'Single')][string]$Name,
+        [Parameter(Mandatory)][System.Data.SQLite.SQLiteConnection]$Connection
     )
-    # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-    FunctionsToExport = @(
-        'Copy-RegistryItem',
-        'Get-StrapperLog',
-        'Get-StoredObject',
-        'Get-UserRegistryKeyProperty',
-        'Install-Chocolatey',
-        'Install-GitHubModule',
-        'Publish-GitHubModule',
-        'Remove-UserRegistryKeyProperty',
-        'Set-RegistryKeyProperty',
-        'Set-StrapperEnviornment'
-        'Set-UserRegistryKeyProperty',
-        'Write-Log',
-        'Write-StoredObject',
-        'Get-WebFile',
-        'Invoke-Script'
+    $schema = $Connection.GetSchema('Tables')
+    $tablesToProcess = if (!$Name) {
+        Write-Verbose -Message 'Returning all tables from schema.'
+        $schema.Rows
+    } else {
+        Write-Verbose -Message "Attempting to locate table with name '$Name'."
+        $lowerName = $name.ToLower()
+        foreach ($table in $schema.Rows) {
+            $tableLowerName = $table.TABLE_NAME.ToLower()
+            Write-Verbose -Message "Comparing '$tableLowerName' to '$lowerName'"
+            if ($lowerName.Equals($tableLowerName)) {
+                @($table)
+            }
+        }
+    }
+    return $(foreach ($table in $tablesToProcess) {
+            $columnRows = $connection.GetSchema('Columns', @($null, $null, $table.TABLE_NAME)).Rows
+            Write-Verbose -Message "Processing $($columnRows.Count) columns for table '$($table.TABLE_NAME)'"
+            $columns = $(
+                foreach ($columnRow in $columnRows) {
+                    [PSCustomObject]@{
+                        TableCatalog = $columnRow.TABLE_CATALOG
+                        TableSchema = $columnRow.TABLE_SCHEMA
+                        TableName = $columnRow.TABLE_NAME
+                        ColumnName = $columnRow.COLUMN_NAME
+                        ColumnGuid = $columnRow.COLUMN_GUID
+                        ColumnPropid = $columnRow.COLUMN_PROPID
+                        OrdinalPosition = $columnRow.ORDINAL_POSITION
+                        ColumnHasdefault = $columnRow.COLUMN_HASDEFAULT
+                        ColumnDefault = $columnRow.COLUMN_DEFAULT
+                        ColumnFlags = $columnRow.COLUMN_FLAGS
+                        IsNullable = $columnRow.IS_NULLABLE
+                        DataType = $columnRow.DATA_TYPE
+                        TypeGuid = $columnRow.TYPE_GUID
+                        CharacterMaximumLength = $columnRow.CHARACTER_MAXIMUM_LENGTH
+                        CharacterOctetLength = $columnRow.CHARACTER_OCTET_LENGTH
+                        NumericPrecision = $columnRow.NUMERIC_PRECISION
+                        NumericScale = $columnRow.NUMERIC_SCALE
+                        DatetimePrecision = $columnRow.DATETIME_PRECISION
+                        CharacterSetCatalog = $columnRow.CHARACTER_SET_CATALOG
+                        CharacterSetSchema = $columnRow.CHARACTER_SET_SCHEMA
+                        CharacterSetName = $columnRow.CHARACTER_SET_NAME
+                        CollationCatalog = $columnRow.COLLATION_CATALOG
+                        CollationSchema = $columnRow.COLLATION_SCHEMA
+                        CollationName = $columnRow.COLLATION_NAME
+                        DomainCatalog = $columnRow.DOMAIN_CATALOG
+                        DomainName = $columnRow.DOMAIN_NAME
+                        Description = $columnRow.DESCRIPTION
+                        PrimaryKey = $columnRow.PRIMARY_KEY
+                        EdmType = $columnRow.EDM_TYPE
+                        Autoincrement = $columnRow.AUTOINCREMENT
+                        Unique = $columnRow.UNIQUE
+                    }
+                }
+            )
+            [PSCustomObject]@{
+                TableCatalog = $table.TABLE_CATALOG
+                TableSchema = $table.TABLE_SCHEMA
+                TableName = $table.TABLE_NAME
+                TableType = $table.TABLE_TYPE
+                TableId = $table.TABLE_ID
+                TableRootpage = $table.TABLE_ROOTPAGE  
+                TableDefinition = $table.TABLE_DEFINITION
+                Columns = $columns
+            }
+        }
     )
-
-    # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
-    CmdletsToExport = @()
-
-    # Variables to export from this module
-    VariablesToExport = '*'
-
-    # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
-    AliasesToExport = @()
-
-    # Private data to pass to the module specified in RootModule/ModuleToProcess. This may also contain a PSData hashtable with additional module metadata used by PowerShell.
-PrivateData = @{
-
-    PSData = @{
-
-        # Tags applied to this module. These help with module discovery in online galleries.
-        # Tags = @()
-
-        # A URL to the license for this module.
-        LicenseUri = 'https://github.com/ProVal-Tech/Strapper/blob/main/LICENSE'
-
-        # A URL to the main website for this project.
-        ProjectUri = 'https://github.com/ProVal-Tech/Strapper'
-
-        # A URL to an icon representing this module.
-        IconUri = 'https://raw.githubusercontent.com/ProVal-Tech/Strapper/main/res/img/strapper.png'
-
-        # ReleaseNotes of this module
-        # ReleaseNotes = ''
-
-        # Prerelease string of this module
-        # Prerelease = ''
-
-        # Flag to indicate whether the module requires explicit user acceptance for install/update/save
-        # RequireLicenseAcceptance = $false
-
-        # External dependent modules of this module
-        # ExternalModuleDependencies = @()
-
-    } # End of PSData hashtable
-
-} # End of PrivateData hashtable
-
-    # HelpInfo URI of this module
-    HelpInfoURI = 'https://github.com/ProVal-Tech/Strapper/issues'
 }
-
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCC7QJWF3E23JQ27
-# XcGCSdDWsBLyUPJBTwX58KG73IKWbqCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB+aem5aHohNqok
+# ON79tebakHrSXW3GjmTRMMqyQR68MaCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -276,32 +276,32 @@ PrivateData = @{
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCBLbBptRpgYeHeEjBQ+oAjZ
-# G02m93a0cL9MInVgNW1qCzANBgkqhkiG9w0BAQEFAASCAYBh13rMgtD58ZBR/U94
-# uj9keDhtX6nfIqkj7bkoxevF1r+xF7nfy63QjijyO3v7SepjQVg2GX8inmwNSRQv
-# tCWWArICERfbPXETFLzXVepUqdT+PckNNTcxZsAa+qtOEidmHnqF2vEgKWg9DtS7
-# UxxuT3YoNieNf0v1DWfvm+joeAAw5yFLX+zCd8GCAFQ4bek66W2Ggi+vTWdHUSBF
-# UzeHiMuXL7lEtIvt3osXdYw7K3O2+iGeU/06METo6/bzNTzYOCM8665r20sTHjnf
-# Kge5wC2sKfYbW+LKvwuQSQAcykgasoSAtd8601vAnD9XpFW6now0yByLhpYR/VHg
-# lVN6HHyDyEC+ymd/rS2UoFNLU55BYONBqAs+O6OgU9y2kn9cuJPtSAsp6DZYmax4
-# GIJeaDEYgw8D7Ula+gkS9qr3WbFjDMP4Nf8Z6vtkOPQuOYX2tGyx15CT4qj20ba8
-# UdkMiMOHDgQTmabuDw+n8bK5+RJOOP7KiQn9s3vbXkgmGXahggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCAdLg7iFjjfFPKen00aRDfu
+# CvJKijq494m8gMZ+Xy4mPjANBgkqhkiG9w0BAQEFAASCAYBBPzMgQElNyosz6oL4
+# wlK7fjridiOVTf5bHfkIxZjDwtyTpSlxAUGTrTkElIzOXujwYFkbiISCmMoM/2VC
+# eb88nSc52k8NmcPpA8j/4gcxQb9UPY9iOtV5oAgRF+KWVHYNC8kjgpVc9tQPb5Ah
+# HMgtoKxyVW+UdBlsJEExuebFhGaMlMCt9NEZCftKygDG/Hgvbib3A5wSwiImN1jG
+# 4yovBZuutlqld0+NijVBHRVoY/BKcvAb3j7Sgi1eFGpAxXXL5cxKDmkxzw/IGP4P
+# iuRh8EEAcFIG4RQ/anXmXlYTOcV0hWeVK+0nxx4JdzFiZ1hsQBCk7U1oELI5sEHi
+# tYcwVONZDfFv+n0s+7BZuRnKN39RuGwLKvkSozxLceM5eGEdoyKjvaWmbSWdcMJn
+# gotUijI6DIJLi/ElfWvUQnHOr4rkRuIyPJpKJPZfTmwZfmHONMl+UAlWKakKlSkY
+# LK/xUMSVpky1pAgEKuLB9ZgbHhbO0t/tBdmh9t7DvAT90HChggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIzMDEyNTE1MzYyNFow
-# PwYJKoZIhvcNAQkEMTIEMEom9T9bG631qYRy+DSvXrssCFAEKRUIGuwnxXKtDAJ9
-# 3YeivDw/7ft+LLQg+LjCtTANBgkqhkiG9w0BAQEFAASCAgB9S9hg5Cs4eVgkgF3g
-# XLGK3MtszZ7xIl4H/OAa89guhJ3PHr/F+0trpOeZhZVe1Cg1apGGuOIwvOin/zBP
-# A+5Qaqh5vZM3qLzph8gNAMIxp5Ko+xrpOZrwLR2rn8X/IxOrhy9v0MPYjPqw88at
-# QcKmUSZZE8x2bj5CY1Gcrplr67ccvabAb6jCPx/3/wO7BwNroUtf+ba3mCKHvjNx
-# hrSmz/lMBoDI0xI7y3zdj6D8EXxZ4BgqbkvFwAZ7hU+CdqwFiQgCvTMbwAGhdZOQ
-# avo0PURbbxdvTHsRN3pP3I1iQJcVTv77sirJ22L1N9Ep46GRdJ3cnN8P7Bx3iIf1
-# /C1sZxiJyHW+Za8JKgVM4eDw3Y6ULXh7Ujj33x0YF25KSupYTcbVt87t6FRe5Co0
-# sQvw69bT6tu78fK06NmXMaWZ6/AqCs8bjy6sH7IpnfkuOWbhXeomZFVCxKuxAucR
-# gshtnwvpE+Y0AC04z6Lq48cPgFcWUe8Ea0LxfQqFdDXWfBHCwceF0rF2pKlhokV9
-# 7x3xaYqdPN0yKV3r/UoOKsUiOoPVKSTFqzAikuR6IfyovdfwhsAJ2NlWuWZej/0Y
-# FGp0spC4U9vhLSThtvc8BcUiPFl5G9UajbSsMGDutfgNOQMaZU4z3H0hNZJ3rVDh
-# ikP/Fnu0mI40yTMhNLNJCZ9j7g==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIzMDEyNTA0MzQzOFow
+# PwYJKoZIhvcNAQkEMTIEMP/1e0DbFdYjklf+fIGub/5FBZXa0A/vFyGsDZcwWGV9
+# W5c6Z0ae4JyhvehDaB+DwjANBgkqhkiG9w0BAQEFAASCAgBFNDtMAbmWCYHTNx/H
+# 2Jy4Pi18jplVOl3ZgbzMLpw248Z4FsNaGI6PB7gtDToBurYwqZRmpZpZ6glfvw8A
+# wT8OS4cKOaC+tkQHCR+0WeQoW87WVUGfmgzvBHavvjS2mBatQG7Ml3I+AcIwQofM
+# 97vn2rmiOSs+FVwrc5H0e0KCf3hOY+miKTMJrX3TBjAmr+urW8mVBsCfFdlN/yft
+# +UuV/ugZEg1lY7zFJVHS4jrX7bo6BuP4mQbREOakkwfKWNhnxuIWJGhITL6NXepd
+# 2CNd/np5w22NuQIqogCnOvN7BI+pBOt/KFr1i3wrLbVewQC168u1D+m+/cRrRi/M
+# c+OD4C1jYJlq7ogESdy0teATh//9H61qy+Ddy6D8TvkXYUwGaWlWNIUM24UECTDS
+# ib/CGrhx7KPzzEoXRlH/t37Kiv+lW0Wxz+MciAZXq8RgLVpBasNgj7EiOLMT63/b
+# DLqb/uFTxSO+E0j+VkkQ/Ee18mtTcEiIs0QvsKqYkQKbTNi3NpGoPax/8xkdexjA
+# ALQUN5oNJXn4J1W+NXFebOuKhKk8UEpoUy3W/IEHrBAY2NNkDmcx+isDtY09gtnd
+# PGSFrpikmfM8q0zGYbmC/Qvgf9kO/idELsYjr6DqbZSVQ+Jgql70KjFpDYzqai4o
+# 6Hy95Ijah0Ck2EoX06xU3BYsLw==
 # SIG # End signature block

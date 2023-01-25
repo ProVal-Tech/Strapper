@@ -1,102 +1,86 @@
-@{
-
-    # Script module or binary module file associated with this manifest.
-    RootModule = 'Strapper.psm1'
-
-    # Version number of this module.
-    ModuleVersion = '1.4.0'
-
-    # ID used to uniquely identify this module
-    GUID = '6fe5cf06-7b4f-4695-b022-1ca2feb0341f'
-
-    # Author of this module
-    Author = 'Stephen Nix'
-
-    # Company or vendor of this module
-    CompanyName = 'ProVal Tech'
-
-    # Copyright statement for this module
-    Copyright = '(c) ProVal Tech. All rights reserved.'
-
-    # Description of the functionality provided by this module
-    Description = 'A cross-platform helper module for PowerShell.'
-
-    # Minimum version of the PowerShell engine required by this module
-    PowerShellVersion = '5.0'
-
-    RequiredAssemblies = @(
-        './Libraries/SQLite/System.Data.SQLite.dll'
+function Get-StrapperLog {
+    <#
+    .SYNOPSIS
+        Get objects representing Strapper logs from a database.
+    .EXAMPLE
+        Get-StrapperLog
+        Gets the Strapper logs from the "<scriptname>_logs" table with a minimum log level of 'Information'.
+    .EXAMPLE
+        Get-StrapperLog -MinimumLevel 'Error'
+        Gets the Strapper logs from the "<scriptname>_logs" table with a minimum log level of 'Error'.
+    .EXAMPLE
+        Get-StrapperLog -MinimumLevel 'Fatal' -TableName 'MyCustomLogTable'
+        Gets the Strapper logs from the "<scriptname>_MyCustomLogTable" table with a minimum log level of 'Fatal'.
+    .PARAMETER MinimumLevel
+        The minimum log level to gather from the table.
+        Highest --- Fatal
+                    Error
+                    Warning
+                    Information
+                    Debug
+         Lowest --- Verbose
+    .PARAMETER TableName
+        The name of the table to retrieve logs from.
+    .PARAMETER DataSource
+        The target SQLite datasource to use. Defaults to Strapper's 'Strapper.db'.
+    .OUTPUTS
+        [System.Collections.Generic.List[StrapperLog]] - A list of logs from the table.
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        [ValidateSet('Verbose', 'Debug', 'Information', 'Warning', 'Error', 'Fatal')]
+        [string]$MinimumLevel = 'Information',
+        [Parameter()][ValidatePattern('^[a-zA-Z0-9\-_]+$')][string]$TableName = $StrapperSession.LogTable,
+        [Parameter()][string]$DataSource = $StrapperSession.DBPath
     )
-    # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-    FunctionsToExport = @(
-        'Copy-RegistryItem',
-        'Get-StrapperLog',
-        'Get-StoredObject',
-        'Get-UserRegistryKeyProperty',
-        'Install-Chocolatey',
-        'Install-GitHubModule',
-        'Publish-GitHubModule',
-        'Remove-UserRegistryKeyProperty',
-        'Set-RegistryKeyProperty',
-        'Set-StrapperEnviornment'
-        'Set-UserRegistryKeyProperty',
-        'Write-Log',
-        'Write-StoredObject',
-        'Get-WebFile',
-        'Invoke-Script'
-    )
+    # Casting here instead of in the parameter because PowerShell modules don't support the export of classes/enums.
+    [StrapperLogLevel]$MinimumLevel = [StrapperLogLevel]$MinimumLevel
+    if($TableName -ne $StrapperSession.LogTable) {
+        $TableName = $TableName -replace '^', $StrapperSession.ScriptTitle
+    }
 
-    # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
-    CmdletsToExport = @()
-
-    # Variables to export from this module
-    VariablesToExport = '*'
-
-    # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
-    AliasesToExport = @()
-
-    # Private data to pass to the module specified in RootModule/ModuleToProcess. This may also contain a PSData hashtable with additional module metadata used by PowerShell.
-PrivateData = @{
-
-    PSData = @{
-
-        # Tags applied to this module. These help with module discovery in online galleries.
-        # Tags = @()
-
-        # A URL to the license for this module.
-        LicenseUri = 'https://github.com/ProVal-Tech/Strapper/blob/main/LICENSE'
-
-        # A URL to the main website for this project.
-        ProjectUri = 'https://github.com/ProVal-Tech/Strapper'
-
-        # A URL to an icon representing this module.
-        IconUri = 'https://raw.githubusercontent.com/ProVal-Tech/Strapper/main/res/img/strapper.png'
-
-        # ReleaseNotes of this module
-        # ReleaseNotes = ''
-
-        # Prerelease string of this module
-        # Prerelease = ''
-
-        # Flag to indicate whether the module requires explicit user acceptance for install/update/save
-        # RequireLicenseAcceptance = $false
-
-        # External dependent modules of this module
-        # ExternalModuleDependencies = @()
-
-    } # End of PSData hashtable
-
-} # End of PrivateData hashtable
-
-    # HelpInfo URI of this module
-    HelpInfoURI = 'https://github.com/ProVal-Tech/Strapper/issues'
+    [System.Data.SQLite.SQLiteConnection]$sqliteConnection = New-SQLiteConnection -DataSource $DataSource -Open
+    if (!(Get-SQLiteTable -Name $TableName -Connection $sqliteConnection)) {
+        Write-Error -Message "No log table with the name '$TableName' was found in the database '$DataSource'" -ErrorAction Stop
+    }
+    $sqliteCommand = $sqliteConnection.CreateCommand()
+    $sqliteCommand.CommandText = "SELECT * FROM '$TableName' WHERE Level >= $($MinimumLevel.value__)"
+    Write-Verbose -Message "CommandText: $($sqliteCommand.CommandText)"
+    $dataReader = $sqliteCommand.ExecuteReader()
+    if (!($dataReader.HasRows)) {
+        Write-Warning -Message "No entries found in '$TableName'."
+        return
+    }
+    $logList = [System.Collections.Generic.List[StrapperLog]]::new()
+    try {
+        while ($dataReader.Read()) {
+            Write-Verbose -Message "Id = $($dataReader.GetInt32(0))"
+            Write-Verbose -Message "Level = $($dataReader.GetInt32(1))"
+            Write-Verbose -Message "Message = $($dataReader.GetString(2))"
+            Write-Verbose -Message "Timestamp = $($dataReader.GetDateTime(3))"
+            $logList.Add(
+                [StrapperLog]@{
+                    Id = $dataReader.GetInt32(0)
+                    Level = $dataReader.GetInt32(1)
+                    Message = $dataReader.GetString(2)
+                    Timestamp = $dataReader.GetDateTime(3)
+                }
+            )
+        }
+        $logList
+    } catch {
+        Write-Error -Message "An error occurred while attempting to query SQL: $($_.Exception)"
+    } finally {
+        $dataReader.Dispose()
+        $sqliteConnection.Dispose()
+    }
 }
-
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCC7QJWF3E23JQ27
-# XcGCSdDWsBLyUPJBTwX58KG73IKWbqCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBbQ2NTQvpr7QUW
+# ogMApMkTczgoyBB4vpkyShj1W3dxDqCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -276,32 +260,32 @@ PrivateData = @{
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCBLbBptRpgYeHeEjBQ+oAjZ
-# G02m93a0cL9MInVgNW1qCzANBgkqhkiG9w0BAQEFAASCAYBh13rMgtD58ZBR/U94
-# uj9keDhtX6nfIqkj7bkoxevF1r+xF7nfy63QjijyO3v7SepjQVg2GX8inmwNSRQv
-# tCWWArICERfbPXETFLzXVepUqdT+PckNNTcxZsAa+qtOEidmHnqF2vEgKWg9DtS7
-# UxxuT3YoNieNf0v1DWfvm+joeAAw5yFLX+zCd8GCAFQ4bek66W2Ggi+vTWdHUSBF
-# UzeHiMuXL7lEtIvt3osXdYw7K3O2+iGeU/06METo6/bzNTzYOCM8665r20sTHjnf
-# Kge5wC2sKfYbW+LKvwuQSQAcykgasoSAtd8601vAnD9XpFW6now0yByLhpYR/VHg
-# lVN6HHyDyEC+ymd/rS2UoFNLU55BYONBqAs+O6OgU9y2kn9cuJPtSAsp6DZYmax4
-# GIJeaDEYgw8D7Ula+gkS9qr3WbFjDMP4Nf8Z6vtkOPQuOYX2tGyx15CT4qj20ba8
-# UdkMiMOHDgQTmabuDw+n8bK5+RJOOP7KiQn9s3vbXkgmGXahggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCA3GQrRwBcwdZa1eZpdE1z8
+# yOrIpD9gTwJhJdZS93QWrjANBgkqhkiG9w0BAQEFAASCAYC8dmGXEy6Hw4y3KiYd
+# NyzY5lXvk0Ddq9nZHKxhu6nX/b4ycnSDbAzwh8kRGAG81QC3dxn9vhtFGa1t15Dd
+# jvFLJ3LnvW1gJ8uTJYu71osuZUcgoyyuR681EpzUs4zE09zqkGXGAB48AyKPPbSq
+# W4yethJf9es28FYMAICV7XV/g0r0vQbutYuZu/FRzT+NLnqLtby4zb52dmAMH1LL
+# IRqvx1k68tVG3VeDjqR5EBUeKQVv5vlC1AYq5w/msffL7TEjdHjvg8FDFqKm4R6I
+# yssEYcNTUyLJw5ek1S25QkMiR8tgMwPcg3zPp7ISV5aSNr70VbqjERvu/EMd8zB6
+# XrPxg5cGjQ1Jg/nou5ZZte0qTr86kuGtQbWUBUGtjPbApcB1HNoiwQJ+tPrmULJX
+# g3HeLa7wIpoj12zMGSvItD0MQqDTqekVYr9Rk5y+mVnrP6rpaTCd0MLhTGNDg2yJ
+# qY5NE9Vetsnl1rsXCut1zReoTCWIzFPEd3D9ZMKtMpZhF8ShggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIzMDEyNTE1MzYyNFow
-# PwYJKoZIhvcNAQkEMTIEMEom9T9bG631qYRy+DSvXrssCFAEKRUIGuwnxXKtDAJ9
-# 3YeivDw/7ft+LLQg+LjCtTANBgkqhkiG9w0BAQEFAASCAgB9S9hg5Cs4eVgkgF3g
-# XLGK3MtszZ7xIl4H/OAa89guhJ3PHr/F+0trpOeZhZVe1Cg1apGGuOIwvOin/zBP
-# A+5Qaqh5vZM3qLzph8gNAMIxp5Ko+xrpOZrwLR2rn8X/IxOrhy9v0MPYjPqw88at
-# QcKmUSZZE8x2bj5CY1Gcrplr67ccvabAb6jCPx/3/wO7BwNroUtf+ba3mCKHvjNx
-# hrSmz/lMBoDI0xI7y3zdj6D8EXxZ4BgqbkvFwAZ7hU+CdqwFiQgCvTMbwAGhdZOQ
-# avo0PURbbxdvTHsRN3pP3I1iQJcVTv77sirJ22L1N9Ep46GRdJ3cnN8P7Bx3iIf1
-# /C1sZxiJyHW+Za8JKgVM4eDw3Y6ULXh7Ujj33x0YF25KSupYTcbVt87t6FRe5Co0
-# sQvw69bT6tu78fK06NmXMaWZ6/AqCs8bjy6sH7IpnfkuOWbhXeomZFVCxKuxAucR
-# gshtnwvpE+Y0AC04z6Lq48cPgFcWUe8Ea0LxfQqFdDXWfBHCwceF0rF2pKlhokV9
-# 7x3xaYqdPN0yKV3r/UoOKsUiOoPVKSTFqzAikuR6IfyovdfwhsAJ2NlWuWZej/0Y
-# FGp0spC4U9vhLSThtvc8BcUiPFl5G9UajbSsMGDutfgNOQMaZU4z3H0hNZJ3rVDh
-# ikP/Fnu0mI40yTMhNLNJCZ9j7g==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIzMDEyNTA0MzUwNVow
+# PwYJKoZIhvcNAQkEMTIEME8Hu96EjOJePYFe1gKt6mPOUxrgS/M5ZFSXzHoqs3cc
+# GjyfmWXKmi4vlQwJl3FQxTANBgkqhkiG9w0BAQEFAASCAgBjY1wcsqiZbwxbJnfA
+# Tf8PvlYFtyaALJatuVk69Oy5ernPvkpijTh0ADoA1/vegsoiOi8KrAJWU8hmXgdj
+# pHGbqtB8FCXAWU+w8EPYBnXFLYTtwO5KwQtDlSnhyznzQ8Xyfh0ZXnUC4n+mNDXP
+# OZlX5rwfgQdFvOECzHQZn3v/gQu0iBYbyuaVLGZ/OyuwmJXEzBDBYI/jV9yMn2TN
+# JNf1K2VRGR91wC0OnBPTmwqacF9B1APWCDolLz2lWxuSdZqiWDANPaWtn057SVlj
+# 7U/mueXfBEWvi5Pc9Xedxmt3GuYmDwGH+FgH8VVf771ZGskadA9o0Wszksrju/9a
+# CY24BrUov7dLe8IIzJdbVd4iJ1ai+Ag8VawKh/7yZF1L8cruOntIRfLzf7P885t+
+# QFiueF9w72Wv0CjvNB6cDFSiCtpChRAabOx7vtLGleHMPOvJc/XFwKK+9xSxjhTt
+# aSIf+onGYoJ3niSX8CGw7O4FggYh0Du+UIS/aVKu+Xo5QAgYuZtsU/6WczPXLwo5
+# 7dkXeWg4cB49Ml53ThgQYWJpTZepAWgZmiFwz+8BFLkIBTejZJZF1jGnTICbw2tL
+# 1hhhX0EcznSQ8StdXZASnsT6vO6VZK5zeCvU4fiZwwTt9TaEu/9tZsPKwZShy0mI
+# UyoYEp6ldtQskOLVLJmYsbUUJA==
 # SIG # End signature block

@@ -1,102 +1,65 @@
-@{
-
-    # Script module or binary module file associated with this manifest.
-    RootModule = 'Strapper.psm1'
-
-    # Version number of this module.
-    ModuleVersion = '1.4.0'
-
-    # ID used to uniquely identify this module
-    GUID = '6fe5cf06-7b4f-4695-b022-1ca2feb0341f'
-
-    # Author of this module
-    Author = 'Stephen Nix'
-
-    # Company or vendor of this module
-    CompanyName = 'ProVal Tech'
-
-    # Copyright statement for this module
-    Copyright = '(c) ProVal Tech. All rights reserved.'
-
-    # Description of the functionality provided by this module
-    Description = 'A cross-platform helper module for PowerShell.'
-
-    # Minimum version of the PowerShell engine required by this module
-    PowerShellVersion = '5.0'
-
-    RequiredAssemblies = @(
-        './Libraries/SQLite/System.Data.SQLite.dll'
+function New-SQLiteObjectTable {
+    <#
+    .SYNOPSIS
+        Creates a new SQLite table specifically designed for storing JSON representations of objects.
+    .EXAMPLE
+        New-SQLiteObjectTable -Name 'myscript_data' -Connection $Connection
+        Creates a new JSON object table named 'myscript_data' if it does not exist.
+    .EXAMPLE
+        New-SQLiteObjectTable -Name 'myscript_logs' -Connection $Connection -Clobber
+        Creates a new JSON object table named 'myscript_data', overwriting any existing table.
+    .EXAMPLE
+        New-SQLiteObjectTable -Name 'myscript_logs' -Connection $Connection -PassThru
+        Creates a new JSON object table named 'myscript_data' if it does not exist and returns an object representing the created (or existing) table.
+    .PARAMETER Name
+        The name of the table to create.
+    .PARAMETER Connection
+        The connection to create the table with.
+    .PARAMETER Clobber
+        Recreate the table (removing all existing data) if it exists.
+    .PARAMETER PassThru
+        Return an object representing the created (or existing) table.
+    .OUTPUTS
+        [pscustomobject] - An object representing the created (or existing) table. Will only return if -PassThru is used.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][ValidatePattern('^[a-zA-Z0-9\-_]+$')][string]$Name,
+        [Parameter(Mandatory)][System.Data.SQLite.SQLiteConnection]$Connection,
+        [Parameter()][switch]$Clobber,
+        [Parameter()][switch]$PassThru
     )
-    # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-    FunctionsToExport = @(
-        'Copy-RegistryItem',
-        'Get-StrapperLog',
-        'Get-StoredObject',
-        'Get-UserRegistryKeyProperty',
-        'Install-Chocolatey',
-        'Install-GitHubModule',
-        'Publish-GitHubModule',
-        'Remove-UserRegistryKeyProperty',
-        'Set-RegistryKeyProperty',
-        'Set-StrapperEnviornment'
-        'Set-UserRegistryKeyProperty',
-        'Write-Log',
-        'Write-StoredObject',
-        'Get-WebFile',
-        'Invoke-Script'
-    )
-
-    # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
-    CmdletsToExport = @()
-
-    # Variables to export from this module
-    VariablesToExport = '*'
-
-    # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
-    AliasesToExport = @()
-
-    # Private data to pass to the module specified in RootModule/ModuleToProcess. This may also contain a PSData hashtable with additional module metadata used by PowerShell.
-PrivateData = @{
-
-    PSData = @{
-
-        # Tags applied to this module. These help with module discovery in online galleries.
-        # Tags = @()
-
-        # A URL to the license for this module.
-        LicenseUri = 'https://github.com/ProVal-Tech/Strapper/blob/main/LICENSE'
-
-        # A URL to the main website for this project.
-        ProjectUri = 'https://github.com/ProVal-Tech/Strapper'
-
-        # A URL to an icon representing this module.
-        IconUri = 'https://raw.githubusercontent.com/ProVal-Tech/Strapper/main/res/img/strapper.png'
-
-        # ReleaseNotes of this module
-        # ReleaseNotes = ''
-
-        # Prerelease string of this module
-        # Prerelease = ''
-
-        # Flag to indicate whether the module requires explicit user acceptance for install/update/save
-        # RequireLicenseAcceptance = $false
-
-        # External dependent modules of this module
-        # ExternalModuleDependencies = @()
-
-    } # End of PSData hashtable
-
-} # End of PrivateData hashtable
-
-    # HelpInfo URI of this module
-    HelpInfoURI = 'https://github.com/ProVal-Tech/Strapper/issues'
+    $targetTable = Get-SQLiteTable -Name $Name -Connection $Connection
+    if ($targetTable -and !$Clobber) {
+        Write-Verbose -Message "Target table '$Name' already exists. Pass -Clobber to overwrite this table."
+    } else {
+        Remove-SQLiteTable -Name $Name -Connection $Connection | Out-Null
+        $createCommand = $Connection.CreateCommand()
+        $createCommand.CommandText = @"
+        CREATE TABLE "$Name" (
+            "id"        INTEGER NOT NULL UNIQUE,
+            "json"      JSON NOT NULL,
+            "timestamp" DATETIME NOT NULL,
+            PRIMARY KEY("id" AUTOINCREMENT)
+        );
+"@
+        $rowsAffected = $createCommand.ExecuteNonQuery()
+        Write-Verbose -Message "Affected row count: $rowsAffected"
+        $targetTable = Get-SQLiteTable -Name $Name -Connection $Connection
+        if (!$targetTable) {
+            Write-Error -Exception ([System.Data.SQLite.SQLiteException]::new([System.Data.SQLite.SQLiteErrorCode]::IoErr, "Failed to create table '$Name'"))
+            return
+        }
+    }
+    if ($PassThru) {
+        return $targetTable
+    }
 }
-
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCC7QJWF3E23JQ27
-# XcGCSdDWsBLyUPJBTwX58KG73IKWbqCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCbM8GuozJJd8XV
+# nLZ/i792yKSQxTYYIJH002K0VuAt2KCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -276,32 +239,32 @@ PrivateData = @{
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCBLbBptRpgYeHeEjBQ+oAjZ
-# G02m93a0cL9MInVgNW1qCzANBgkqhkiG9w0BAQEFAASCAYBh13rMgtD58ZBR/U94
-# uj9keDhtX6nfIqkj7bkoxevF1r+xF7nfy63QjijyO3v7SepjQVg2GX8inmwNSRQv
-# tCWWArICERfbPXETFLzXVepUqdT+PckNNTcxZsAa+qtOEidmHnqF2vEgKWg9DtS7
-# UxxuT3YoNieNf0v1DWfvm+joeAAw5yFLX+zCd8GCAFQ4bek66W2Ggi+vTWdHUSBF
-# UzeHiMuXL7lEtIvt3osXdYw7K3O2+iGeU/06METo6/bzNTzYOCM8665r20sTHjnf
-# Kge5wC2sKfYbW+LKvwuQSQAcykgasoSAtd8601vAnD9XpFW6now0yByLhpYR/VHg
-# lVN6HHyDyEC+ymd/rS2UoFNLU55BYONBqAs+O6OgU9y2kn9cuJPtSAsp6DZYmax4
-# GIJeaDEYgw8D7Ula+gkS9qr3WbFjDMP4Nf8Z6vtkOPQuOYX2tGyx15CT4qj20ba8
-# UdkMiMOHDgQTmabuDw+n8bK5+RJOOP7KiQn9s3vbXkgmGXahggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCDdpR9XLDOq6b2fcT6Nw7O4
+# h1ktuIzfaphwW/GYWzbPGjANBgkqhkiG9w0BAQEFAASCAYBwFFp8ZCi/lBNnf2yt
+# aSa8r9Ivxpq0NMat8PxsNKi8CPu4Br/und7QADkAKQSG38q4RxwuRP1s1onyS++a
+# 9c3y1daQWE4B2OiZmK2tcZmlRte6MdOXUYeqsQg567bjXxVjqG3PFjRdqVE2dksG
+# pGltKEDaWw2nhVcVULHCBhFCpIWD56QiN/FbORBpkMzR7+1UJE+yxWg5/T/mDv4g
+# 9CX9+krxbviV/CxEFt+4Xcm9aJj3fpFy35P84mDU3r5+a7ihiahLtSEt7hQOwlzx
+# Jabc5/L1tZX5ZfIzhj2hax23Ia4fKMtyclgPlEJcK1ELcb585xsVhhTDm3i419Ti
+# fjubLKrYBMfyseQspSkbFE3LtYn8lxkmG64jeS1y1RgIr2hQ2dYbywJ8kxhViwvy
+# 6TgBqJb2v3YbnwwfPCtzUfSx2oL/Q8ijYFjWdTRhhOCgYjr/IckujHPd4gs0z/Vo
+# iSDCHxmECOYHGgFSNq5VzVXHMwxYZ0sFFNu6fCs5koww86OhggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIzMDEyNTE1MzYyNFow
-# PwYJKoZIhvcNAQkEMTIEMEom9T9bG631qYRy+DSvXrssCFAEKRUIGuwnxXKtDAJ9
-# 3YeivDw/7ft+LLQg+LjCtTANBgkqhkiG9w0BAQEFAASCAgB9S9hg5Cs4eVgkgF3g
-# XLGK3MtszZ7xIl4H/OAa89guhJ3PHr/F+0trpOeZhZVe1Cg1apGGuOIwvOin/zBP
-# A+5Qaqh5vZM3qLzph8gNAMIxp5Ko+xrpOZrwLR2rn8X/IxOrhy9v0MPYjPqw88at
-# QcKmUSZZE8x2bj5CY1Gcrplr67ccvabAb6jCPx/3/wO7BwNroUtf+ba3mCKHvjNx
-# hrSmz/lMBoDI0xI7y3zdj6D8EXxZ4BgqbkvFwAZ7hU+CdqwFiQgCvTMbwAGhdZOQ
-# avo0PURbbxdvTHsRN3pP3I1iQJcVTv77sirJ22L1N9Ep46GRdJ3cnN8P7Bx3iIf1
-# /C1sZxiJyHW+Za8JKgVM4eDw3Y6ULXh7Ujj33x0YF25KSupYTcbVt87t6FRe5Co0
-# sQvw69bT6tu78fK06NmXMaWZ6/AqCs8bjy6sH7IpnfkuOWbhXeomZFVCxKuxAucR
-# gshtnwvpE+Y0AC04z6Lq48cPgFcWUe8Ea0LxfQqFdDXWfBHCwceF0rF2pKlhokV9
-# 7x3xaYqdPN0yKV3r/UoOKsUiOoPVKSTFqzAikuR6IfyovdfwhsAJ2NlWuWZej/0Y
-# FGp0spC4U9vhLSThtvc8BcUiPFl5G9UajbSsMGDutfgNOQMaZU4z3H0hNZJ3rVDh
-# ikP/Fnu0mI40yTMhNLNJCZ9j7g==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIzMDEyNTA0MzQ1MFow
+# PwYJKoZIhvcNAQkEMTIEMBbR6dc6ecbX9tB6kCvSSY5Ti5aO2MlQbIMYMZibtciV
+# n7odQ3hxTPfKWvlkKavQWzANBgkqhkiG9w0BAQEFAASCAgArs9uuJgk4tNWayiln
+# m3EblCdmKjAz52I4OF5CqN1/WcCTJuLy60+MZcf5BcClfY9+tYnnKuXipK/YZGmk
+# CDQ4OBdurgY+bBLe5ffxTUMbMLIJda5/F10bG8cBA8Z15WLgP3zVKTHR8MDgy1yn
+# Q80K218lOOLHadjUTwCZFp9at5s9eFkWXbSgC9cERLPlwlTVmkIMsNIJsCay8xfC
+# hcp3Yme9j3KA8xTF9bCtBpvdJ4a8810ZbQLtgqOlSt5R3MCv+3McfVn1vNDAPXtq
+# LwyUzPxNAC7s/+QxWgRHA84k8L/fnJjv6AcFO7gljar4d06+9XqpXFCs1KsWV2+z
+# mBcK3xz6KGk948bPNxaQiy82CqBytyEyCZC3A9ocZK3cCWX5kIFlNtfMaYc7tryb
+# JXMEzSTMoCzY7K5yeRKGvObuWD7IQ0+/3K8K1MIlhLDlTX6jaXnzknNGrCXJ9hC2
+# +KACaS+Zk22QYQGyOUHcL+fw5lGgTTC4ZQYUCDe8EeUoLH5oR8uzdinX6ePKZWQ2
+# JNRb754gYj9SkVPZxmJr9s8VsMV9WYahI5SIGC/W1LwS7pZtLXErLJV2XyunPY+v
+# kScuLMVtnIuufmU6ZmmeCrLk0oS28AlrvfqMS0ttQu+pKlGwa7ptTwnQOxt5n3tP
+# S4Tjx83sAzHzo4+dhHPgAGlnAg==
 # SIG # End signature block

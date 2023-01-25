@@ -1,102 +1,20 @@
-@{
-
-    # Script module or binary module file associated with this manifest.
-    RootModule = 'Strapper.psm1'
-
-    # Version number of this module.
-    ModuleVersion = '1.4.0'
-
-    # ID used to uniquely identify this module
-    GUID = '6fe5cf06-7b4f-4695-b022-1ca2feb0341f'
-
-    # Author of this module
-    Author = 'Stephen Nix'
-
-    # Company or vendor of this module
-    CompanyName = 'ProVal Tech'
-
-    # Copyright statement for this module
-    Copyright = '(c) ProVal Tech. All rights reserved.'
-
-    # Description of the functionality provided by this module
-    Description = 'A cross-platform helper module for PowerShell.'
-
-    # Minimum version of the PowerShell engine required by this module
-    PowerShellVersion = '5.0'
-
-    RequiredAssemblies = @(
-        './Libraries/SQLite/System.Data.SQLite.dll'
-    )
-    # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-    FunctionsToExport = @(
-        'Copy-RegistryItem',
-        'Get-StrapperLog',
-        'Get-StoredObject',
-        'Get-UserRegistryKeyProperty',
-        'Install-Chocolatey',
-        'Install-GitHubModule',
-        'Publish-GitHubModule',
-        'Remove-UserRegistryKeyProperty',
-        'Set-RegistryKeyProperty',
-        'Set-StrapperEnviornment'
-        'Set-UserRegistryKeyProperty',
-        'Write-Log',
-        'Write-StoredObject',
-        'Get-WebFile',
-        'Invoke-Script'
-    )
-
-    # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
-    CmdletsToExport = @()
-
-    # Variables to export from this module
-    VariablesToExport = '*'
-
-    # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
-    AliasesToExport = @()
-
-    # Private data to pass to the module specified in RootModule/ModuleToProcess. This may also contain a PSData hashtable with additional module metadata used by PowerShell.
-PrivateData = @{
-
-    PSData = @{
-
-        # Tags applied to this module. These help with module discovery in online galleries.
-        # Tags = @()
-
-        # A URL to the license for this module.
-        LicenseUri = 'https://github.com/ProVal-Tech/Strapper/blob/main/LICENSE'
-
-        # A URL to the main website for this project.
-        ProjectUri = 'https://github.com/ProVal-Tech/Strapper'
-
-        # A URL to an icon representing this module.
-        IconUri = 'https://raw.githubusercontent.com/ProVal-Tech/Strapper/main/res/img/strapper.png'
-
-        # ReleaseNotes of this module
-        # ReleaseNotes = ''
-
-        # Prerelease string of this module
-        # Prerelease = ''
-
-        # Flag to indicate whether the module requires explicit user acceptance for install/update/save
-        # RequireLicenseAcceptance = $false
-
-        # External dependent modules of this module
-        # ExternalModuleDependencies = @()
-
-    } # End of PSData hashtable
-
-} # End of PrivateData hashtable
-
-    # HelpInfo URI of this module
-    HelpInfoURI = 'https://github.com/ProVal-Tech/Strapper/issues'
+<#
+.SYNOPSIS
+    A class representing a log entry from the Strapper database.
+.LINK
+    https://github.com/ProVal-Tech/Strapper/blob/main/docs/StrapperLog.md
+#>
+class StrapperLog {
+    [int]$Id
+    [StrapperLogLevel]$Level
+    [string]$Message
+    [datetime]$Timestamp
 }
-
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCC7QJWF3E23JQ27
-# XcGCSdDWsBLyUPJBTwX58KG73IKWbqCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAi/2zB6Dk/Q4OI
+# zXmeZMyluDFlZQ0P1uS4+V29RdLI3aCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -276,32 +194,32 @@ PrivateData = @{
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCBLbBptRpgYeHeEjBQ+oAjZ
-# G02m93a0cL9MInVgNW1qCzANBgkqhkiG9w0BAQEFAASCAYBh13rMgtD58ZBR/U94
-# uj9keDhtX6nfIqkj7bkoxevF1r+xF7nfy63QjijyO3v7SepjQVg2GX8inmwNSRQv
-# tCWWArICERfbPXETFLzXVepUqdT+PckNNTcxZsAa+qtOEidmHnqF2vEgKWg9DtS7
-# UxxuT3YoNieNf0v1DWfvm+joeAAw5yFLX+zCd8GCAFQ4bek66W2Ggi+vTWdHUSBF
-# UzeHiMuXL7lEtIvt3osXdYw7K3O2+iGeU/06METo6/bzNTzYOCM8665r20sTHjnf
-# Kge5wC2sKfYbW+LKvwuQSQAcykgasoSAtd8601vAnD9XpFW6now0yByLhpYR/VHg
-# lVN6HHyDyEC+ymd/rS2UoFNLU55BYONBqAs+O6OgU9y2kn9cuJPtSAsp6DZYmax4
-# GIJeaDEYgw8D7Ula+gkS9qr3WbFjDMP4Nf8Z6vtkOPQuOYX2tGyx15CT4qj20ba8
-# UdkMiMOHDgQTmabuDw+n8bK5+RJOOP7KiQn9s3vbXkgmGXahggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCDWJxrFNvgIeDgDzWUCMYaO
+# lG8LREN3cwa/ZFwKNQG3RTANBgkqhkiG9w0BAQEFAASCAYCOLo9ny/r/cjv2UN6f
+# 0ZZz9GUWaq6m++C1aqID63l9QSMIYgRiOZmT47dP2AlWi4M0ewJdRnABfv210w+A
+# UHnL5dEZ+QvVb1JBZ79YfZG8WWvj9uh9i90yQ7d4vwocj8FJGnQm+lEZaKzJHUZJ
+# NApKubvA0VwWl3QhGGoO0C+nvOwaWDYlOI9WfXZn4w8oAPMFH4qb67D/gVxBOxL3
+# W3ECsW/d5BQkIzt51VJtD5U5n6/S7Ty7nCvY8AgLFBxlRaquX3F4Km11mLfkXAEZ
+# vs7YEgkVQHUqFdjjds95c31EOC9GRF9EMhp3p4AyrkkTgpoB1lkqvtsGn0d421Jf
+# kxPEvUNL9zez0geioiFZLJ65oOhpbxMi9PDmjYbVOmM9TLmkoU2j1x40MgaZqV4r
+# Xwt3V5ZzDlWHmMqi95xVoKWj0Bu5aBsuAlA1xOPNhJdvVctR7yyteOjAMIirbq8F
+# dG6nE8D8Kc7Ck3eegydv8Njh0Q3xTjgm6qpGf0JKo/BGyiGhggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIzMDEyNTE1MzYyNFow
-# PwYJKoZIhvcNAQkEMTIEMEom9T9bG631qYRy+DSvXrssCFAEKRUIGuwnxXKtDAJ9
-# 3YeivDw/7ft+LLQg+LjCtTANBgkqhkiG9w0BAQEFAASCAgB9S9hg5Cs4eVgkgF3g
-# XLGK3MtszZ7xIl4H/OAa89guhJ3PHr/F+0trpOeZhZVe1Cg1apGGuOIwvOin/zBP
-# A+5Qaqh5vZM3qLzph8gNAMIxp5Ko+xrpOZrwLR2rn8X/IxOrhy9v0MPYjPqw88at
-# QcKmUSZZE8x2bj5CY1Gcrplr67ccvabAb6jCPx/3/wO7BwNroUtf+ba3mCKHvjNx
-# hrSmz/lMBoDI0xI7y3zdj6D8EXxZ4BgqbkvFwAZ7hU+CdqwFiQgCvTMbwAGhdZOQ
-# avo0PURbbxdvTHsRN3pP3I1iQJcVTv77sirJ22L1N9Ep46GRdJ3cnN8P7Bx3iIf1
-# /C1sZxiJyHW+Za8JKgVM4eDw3Y6ULXh7Ujj33x0YF25KSupYTcbVt87t6FRe5Co0
-# sQvw69bT6tu78fK06NmXMaWZ6/AqCs8bjy6sH7IpnfkuOWbhXeomZFVCxKuxAucR
-# gshtnwvpE+Y0AC04z6Lq48cPgFcWUe8Ea0LxfQqFdDXWfBHCwceF0rF2pKlhokV9
-# 7x3xaYqdPN0yKV3r/UoOKsUiOoPVKSTFqzAikuR6IfyovdfwhsAJ2NlWuWZej/0Y
-# FGp0spC4U9vhLSThtvc8BcUiPFl5G9UajbSsMGDutfgNOQMaZU4z3H0hNZJ3rVDh
-# ikP/Fnu0mI40yTMhNLNJCZ9j7g==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIzMDEyNTA0MzQzMlow
+# PwYJKoZIhvcNAQkEMTIEMGzMpdgocWBofqEyldEnLTnPrgCmVwpbydn3/FWakcdP
+# js/KT5rJvR+C3ysC/+KspTANBgkqhkiG9w0BAQEFAASCAgBeocEHn+ebtabp0y3q
+# i/foqG1edAunjiYsMHgv5ATBJdpbDqiXRpxwZq/my2aChLVR+zgaFAbvr0rLdKQe
+# 1FbG8jQa5lzWYb50LMyVWN4YxBJtGWYgb9spNQ016v7QQUnTsqUfOL8oHxgRv18j
+# IFHFtTImHIEbOxLUGPrZPV16BTEMPSOWwqKnBcMI69mvTU5LSgBdlWLJSg5+RxeI
+# FBm2ILi9cPe5OTyih+JK4gc7SWeA6fk4z8nFHTERZF7fzXMo20v+V6MfRzaLz1YS
+# +9tVca5NObkZhJu/6SCrib9iJX3siKb+gklgJcVw8niP/v4oxfOOPrTcqzKQQ96/
+# O8Y2Gg/3rJ6YEvRS4Zbck1Ayx/je4ojWWmjRHrA3vc+xgo4LP9mycn0KqWrdyqqJ
+# NPXXeM5nQOTHTFPd3Jd3V5+61NctCfKv27K2jTQD3Jrxtupp5/vOYKxjCuNe9cRr
+# j7POOkBbwRtUxfdc6Ger6euxVThSyXIPGkku786iD3mk67XA4N0EsWe0cdh7sRfE
+# OZqAvfvNI9Vs1bXf1QI27EC+1JCpLXNwfEG994pDHYcGdZML6tf12OQhcsX40Q49
+# yl8Lsj/3k7qu+CiyA/Tom0PUuwIA1tGqZiKfB1mGXQGOwYIDvVym9ivgD2O03Tfz
+# YO/U1usxghDK425YSlGOIqGg3A==
 # SIG # End signature block

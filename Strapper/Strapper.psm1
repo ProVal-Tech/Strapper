@@ -1,11 +1,13 @@
 $StrapperSession = [pscustomobject]@{
     LogPath = $null
-    DataPath = $null
     ErrorPath = $null
     WorkingPath = $null
     ScriptTitle = $null
     IsLoaded = $true
     IsElevated = $false
+    LogsToDB = $true
+    LogTable = $null
+    DBPath = "$PSScriptRoot\Strapper.db"
     Platform = [System.Environment]::OSVersion.Platform
 }
 
@@ -13,31 +15,48 @@ if ($MyInvocation.PSCommandPath) {
     $scriptObject = Get-Item -Path $MyInvocation.PSCommandPath
     $StrapperSession.WorkingPath = $($scriptObject.DirectoryName)
     $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-log.txt"
-    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-data.txt"
     $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-error.txt"
     $StrapperSession.ScriptTitle = $scriptObject.BaseName
+    $StrapperSession.LogTable = "$($scriptObject.BaseName)_log"
 } else {
     $StrapperSession.WorkingPath = (Get-Location).Path
-    $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-log.txt"
-    $StrapperSession.DataPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-data.txt"
-    $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$((Get-Date).ToString('yyyyMMdd'))-error.txt"
-    $StrapperSession.ScriptTitle = '***Manual Run***'
+    $currentDate = (Get-Date).ToString('yyyyMMdd')
+    $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$currentDate-log.txt"
+    $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$currentDate-error.txt"
+    $StrapperSession.ScriptTitle = $currentDate
+    $StrapperSession.LogTable = "$($currentDate)_log"
 }
 
 if ($StrapperSession.Platform -eq 'Win32NT') {
-    $StrapperSession.IsElevated = (New-Object -TypeName Security.Principal.WindowsPrincipal -ArgumentList ([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
+    $StrapperSession.IsElevated = (
+        New-Object `
+            -TypeName Security.Principal.WindowsPrincipal `
+            -ArgumentList ([Security.Principal.WindowsIdentity]::GetCurrent())
+    ).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
 } else {
     $StrapperSession.IsElevated = $(id -u) -eq 0
 }
 
+$enums = @(@(
+    "$PSScriptRoot\enums\StrapperLogLevel.ps1"
+) | Get-ChildItem)
+
+$classes = @(@(
+    "$PSScriptRoot\classes\StrapperLog.ps1"
+) | Get-ChildItem)
+
 $publicFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" -Recurse )
 $privateFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1" -Recurse )
-foreach ($scriptImport in @($publicFunctions + $privateFunctions)) {
+foreach ($importTarget in @($enums + $classes + $publicFunctions + $privateFunctions)) {
     try {
-        . $scriptImport.FullName
+        . $importTarget.FullName
     } catch {
-        Write-Error -Message "Failed to import $($scriptImport.FullName)"
+        Write-Error -Message "Failed to import $($importTarget.FullName)"
     }
+}
+
+if(!(Test-Path -LiteralPath $StrapperSession.DBPath)) {
+    [System.Data.SQLite.SQLiteConnection]::CreateFile($StrapperSession.DBPath)
 }
 
 Export-ModuleMember -Variable StrapperSession
@@ -45,8 +64,8 @@ Export-ModuleMember -Variable StrapperSession
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB7W5vEagpor/PY
-# /nd83a2fW7B5M7bLFWGqTmmsdUTGAKCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCNJ353oCya4Eq6
+# K3Q7oF45yQEzIG/VdpLXf+goXnHS8aCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -226,32 +245,32 @@ Export-ModuleMember -Variable StrapperSession
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCD6vEFgtP8OzTVOf9zxUfAW
-# x3klWciXT+4F15VusT/K1TANBgkqhkiG9w0BAQEFAASCAYA0KNFugynWp+IxKKWq
-# 2fhoWW2AorBTvyqc3RKXu11Sq7PjrMeJJOuMdv97w/tArDagPSB4UGGtDjgFHbDS
-# Sh7hdIfgZnWt77AENy1CaKJtvWOrkeRIRHAgYevh76DlovXaPoX47z48ok3MSoJE
-# RrB50ytQ34onPNtlGXl0fL53mJ6fHK2ypYvEgiuv6ebiMFwnqeWbJd6CTusmpwWQ
-# QWX6BNxR7DE1IY2q2FKYN4W+Q5gve4Ag2S2HEGiFSWlBaVk6aSehsq88xmt8xr0q
-# PtMxfVUtyj8+tbfnzGvnjzkMjcZO4eRJ0IGt02Qkjd6pr3FyeSm5/Ew2bnlsQSk+
-# eR28hJQqoA6/+XdXktN91sMkTeU29M4SNVIdVhhB/hsnoD5N6XXFBTRZm2zuoPzC
-# ptccb4gJmRJl0K0KjUWfQ4PpOoWD7x/26LFZFMjYeXRuncWJ1GRE5hNda02T1vAS
-# FaKWaxneLyx6ryBYBzGLn/tHMuuDLDWllc6Adfo9dLpw+A+hggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCBc1Ozx5TsywdwLnH5lGqrf
+# A0JjNTNrsT//a1mBBbCCXzANBgkqhkiG9w0BAQEFAASCAYAswky4K4a9n68eJ7cq
+# 6GORgvTOwNynamSX/Re7hFYBqq2UxVfURgRHOHWsBvZUAf7gDUzMC3rJCiZobC54
+# J6qU9Zw/fmt7SFP5bWMwXdN8mH0PS3zS86luHItHRj2L/jE1EpttTxo4NqjiSYxF
+# Se6U8XT+WzU061hlU1Y2AY67jA3azqTUUHdwgZ6pwGYisU7ANTfieJBimrImhbK4
+# mPFDlU4oQ26iL5mPRMkkBWJrUL3rZ82j3kPFJBytTJ8w66azGec4E3LFdg4Cb7Po
+# RaRzqMskVXvd+pZvg0LLPcY0C39pz+TPnMs5ZoCt0FlFy59qR3jUFDCnKnTvuIu5
+# TJFMEMAyKl4cHi3yoZ3Bb82Mw0hevO/yjgRxYd1MMyYDfb6X19rQhifjWoKYPQsZ
+# hQoVz2OnVUj6CHgSO6P1sR7H2PrBXN1fo6q+w2xQnxHpMmxlvt7CXCAD97Rv77cn
+# asEdnHCFFRkYM7Cd5y2JKg4s+LhTypUbiBrwVPnMVESeu3yhggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTgwM1ow
-# PwYJKoZIhvcNAQkEMTIEMHcRy7QMN/iSCrc5nPKV4AuYvxB4cwwFc+nuwhzOw6gJ
-# omEx4+br/WPUEUtkY5VvbTANBgkqhkiG9w0BAQEFAASCAgCP7sQOK5NpwPex0SoO
-# U9+kN+ohg0hKY6escKFQmRKIxRB6QwW2aYRqPSDdYSXuWrTPEDYo2HQY8Qd3oFkr
-# NAWWPEaBY5U/P8n/uglelFXf2+RnJt4K5yPmcL2IRvnGnbfZtXknEZtfNsoIkcFw
-# xKn1J2/7HO9Jd2SPx/PTuRQCKbtC8nuwr/TL1imtwFeV6FmMAofdz002CZJj5gLm
-# IHUHWmoYxUiKfbkzeCwIrdZomCxeFgwF9u9YSKxN8VOqzoCn+iM7dBIYvOTSs0kK
-# CnN7GaPu/uoTEUTqn+3YReLL9WA2dFjpiKKi+ANcD4M4kd+xIv9fDt7oSVlY0bmb
-# q5aQsSNMRO6HDwatz79kvd2GooARAnmaJElrfEhcUEwdiFXHIM0Sisf3fAMCYJaP
-# Q6KCsytz+JzH45DWi0oxi127TzX+bJdTbVJ0/JcSGA6GMrXhSUj+6VvHKScJ65jA
-# HK2TkBienD+7yRUvxEPVJJMgwAbb6sbb/ZWK6pXf4A3GqRgUiJnBWTL0jsQWjA2k
-# b0NTIdOBVbXN/YWfeY0ruIFk5huAQd5Oy/3eZAM0TxqHPxpPHPBvoL7herOop7oB
-# 0K782Rtaxx7U16lLQmpU3jFq+mN3OTIyHJXGw64sTA2F3HiToneMp4WGKirT6dT9
-# aDrGm/L5YGtU+V0SV/YsvkRk7g==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIzMDEyNTA0MzQyOVow
+# PwYJKoZIhvcNAQkEMTIEMFfO2nbIcqd3Q1JMY77kSIbVZDBRxKNVjdpphTb+OFXe
+# Ebq7No9jlzEmZGE/OrpulTANBgkqhkiG9w0BAQEFAASCAgAOYDfWXkuC/+33HoTb
+# KHH6bhLEOhgSEi68uh9Z8nFkY1/kBT4Qa6sG4zl9yWy6BCbHskhg2lYNl994N3Eq
+# ejFHJ+8Wlag6slUVM2HUs8QO+kho+E8Xapz7wb+PJwz3yzWXCH6vWj2zxkNwXDVm
+# wYsJG+0+5mXm0B8e6iAlOKag2EyHtNQ1Yc299MOrogkZHU7yy58lJXarkjIiI77A
+# 0OYSGX+Mx3+PIRvIshwOrEpTVdMaZ7jfNZAs0vwNeEPfdDP93def/HuCtTvF9lJF
+# avAyNrtUj8FA0M8uhnVerQIqa8FNn7tzCzt49z0JmOCuBeyHhH3tokld5n5d76vG
+# ENW3ZzcfnnMF4odkSxRE/jc+ametJUqrbvNBxWxYyfspiy6eVSa+MlaqlxjWLgF9
+# UpM1nhinfR5MxJk9KUpHUAOTP4s47vhvmtPEJlQYETkrB+8+kh10tgryLtWzh1LG
+# iIlyDs3/gzhMN9zycxw4Qt4LZftuijqmL/ltmolF6H/VpEc1oI/fCBttd+RRjVO/
+# VKhmKLF/4xbwE9GGOw45YLGFagfyKp2hXgyjtJaEOurBwC9YnfnunW2hxFcHGdPL
+# oP3BjHLkB3qmVxVOow0dzch7E3CqROZxzvAjnVZHLwZmo+Jd0t0ZT0H8ijcxuQeI
+# 33e9/vDokFvSeX42qs/xksXvNQ==
 # SIG # End signature block

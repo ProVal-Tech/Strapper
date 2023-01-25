@@ -1,102 +1,76 @@
-@{
-
-    # Script module or binary module file associated with this manifest.
-    RootModule = 'Strapper.psm1'
-
-    # Version number of this module.
-    ModuleVersion = '1.4.0'
-
-    # ID used to uniquely identify this module
-    GUID = '6fe5cf06-7b4f-4695-b022-1ca2feb0341f'
-
-    # Author of this module
-    Author = 'Stephen Nix'
-
-    # Company or vendor of this module
-    CompanyName = 'ProVal Tech'
-
-    # Copyright statement for this module
-    Copyright = '(c) ProVal Tech. All rights reserved.'
-
-    # Description of the functionality provided by this module
-    Description = 'A cross-platform helper module for PowerShell.'
-
-    # Minimum version of the PowerShell engine required by this module
-    PowerShellVersion = '5.0'
-
-    RequiredAssemblies = @(
-        './Libraries/SQLite/System.Data.SQLite.dll'
+function Get-StoredObject {
+    <#
+    .SYNOPSIS
+        Get previously stored objects from a Strapper object table.
+    .EXAMPLE
+        Get-StoredObject -IncludeMetadata
+        Gets the stored objects list from the default "<scriptname>_data" table, including the object metadata.
+    .EXAMPLE
+        Get-StoredObject -TableName disks
+        Gets the stored objects list from the "<scriptname>_disks" table.
+    .PARAMETER TableName
+        The name of the table to retrieve objects from.
+    .PARAMETER DataSource
+        The target SQLite datasource to use. Defaults to Strapper's 'Strapper.db'.
+    .PARAMETER IncludeMetadata
+        Include a Metadata property on each object that describes additional information about table name, insertion time, and row ID.
+    .OUTPUTS
+        [System.Collections.Generic.List[pscustomobject]] - A list of previously stored objects.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter()][ValidatePattern('^[a-zA-Z0-9\-_]+$')][string]$TableName,
+        [Parameter()][string]$DataSource = $StrapperSession.DBPath,
+        [Parameter()][switch]$IncludeMetadata
     )
-    # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-    FunctionsToExport = @(
-        'Copy-RegistryItem',
-        'Get-StrapperLog',
-        'Get-StoredObject',
-        'Get-UserRegistryKeyProperty',
-        'Install-Chocolatey',
-        'Install-GitHubModule',
-        'Publish-GitHubModule',
-        'Remove-UserRegistryKeyProperty',
-        'Set-RegistryKeyProperty',
-        'Set-StrapperEnviornment'
-        'Set-UserRegistryKeyProperty',
-        'Write-Log',
-        'Write-StoredObject',
-        'Get-WebFile',
-        'Invoke-Script'
-    )
-
-    # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
-    CmdletsToExport = @()
-
-    # Variables to export from this module
-    VariablesToExport = '*'
-
-    # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
-    AliasesToExport = @()
-
-    # Private data to pass to the module specified in RootModule/ModuleToProcess. This may also contain a PSData hashtable with additional module metadata used by PowerShell.
-PrivateData = @{
-
-    PSData = @{
-
-        # Tags applied to this module. These help with module discovery in online galleries.
-        # Tags = @()
-
-        # A URL to the license for this module.
-        LicenseUri = 'https://github.com/ProVal-Tech/Strapper/blob/main/LICENSE'
-
-        # A URL to the main website for this project.
-        ProjectUri = 'https://github.com/ProVal-Tech/Strapper'
-
-        # A URL to an icon representing this module.
-        IconUri = 'https://raw.githubusercontent.com/ProVal-Tech/Strapper/main/res/img/strapper.png'
-
-        # ReleaseNotes of this module
-        # ReleaseNotes = ''
-
-        # Prerelease string of this module
-        # Prerelease = ''
-
-        # Flag to indicate whether the module requires explicit user acceptance for install/update/save
-        # RequireLicenseAcceptance = $false
-
-        # External dependent modules of this module
-        # ExternalModuleDependencies = @()
-
-    } # End of PSData hashtable
-
-} # End of PrivateData hashtable
-
-    # HelpInfo URI of this module
-    HelpInfoURI = 'https://github.com/ProVal-Tech/Strapper/issues'
+    [System.Data.SQLite.SQLiteConnection]$sqliteConnection = New-SQLiteConnection -DataSource $DataSource -Open
+    if (!$TableName) {
+        $TableName = 'data'
+    }
+    $TableName = "$($StrapperSession.ScriptTitle)_$TableName"
+    [System.Data.SQLite.SQLiteConnection]$sqliteConnection = New-SQLiteConnection -DataSource $DataSource -Open
+    if (!(Get-SQLiteTable -Name $TableName -Connection $sqliteConnection)) {
+        Write-Error -Message "No log table with the name '$TableName' was found in the database '$DataSource'" -ErrorAction Stop
+    }
+    $sqliteCommand = $sqliteConnection.CreateCommand()
+    $sqliteCommand.CommandText = "SELECT * FROM '$TableName'"
+    Write-Verbose -Message "CommandText: $($sqliteCommand.CommandText)"
+    $dataReader = $sqliteCommand.ExecuteReader()
+    if (!($dataReader.HasRows)) {
+        Write-Warning -Message "No entries found in '$TableName'."
+        return
+    }
+    $objectList = [System.Collections.Generic.List[pscustomobject]]::new()
+    try {
+        while ($dataReader.Read()) {
+            $returnObject = $dataReader.GetString(1) | ConvertFrom-Json
+            if($IncludeMetadata) {
+                Write-Verbose -Message "Adding metadata to the return object."
+                $metadata = [PSCustomObject]@{
+                    Id = $dataReader.GetInt32(0)
+                    Timestamp = $dataReader.GetDateTime(2)
+                    TableName = $dataReader.GetTableName(0)
+                }
+                Write-Verbose -Message "Id = $($metadata.Id)"
+                Write-Verbose -Message "Timestamp = $($metadata.Timestamp)"
+                Write-Verbose -Message "TableName = $($metadata.TableName)"
+                $returnObject | Add-Member -MemberType NoteProperty -Name Metadata -Value $metadata
+            }
+            $objectList.Add($returnObject)
+        }
+        $objectList
+    } catch {
+        Write-Error -Message "An error occurred while attempting to query SQL: $($_.Exception)"
+    } finally {
+        $dataReader.Dispose()
+        $sqliteConnection.Dispose()
+    }
 }
-
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCC7QJWF3E23JQ27
-# XcGCSdDWsBLyUPJBTwX58KG73IKWbqCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCB0aCfV7tgkiROd
+# g7hwaHyWd7i2tx42OckP03+LBsF8wqCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -276,32 +250,32 @@ PrivateData = @{
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCBLbBptRpgYeHeEjBQ+oAjZ
-# G02m93a0cL9MInVgNW1qCzANBgkqhkiG9w0BAQEFAASCAYBh13rMgtD58ZBR/U94
-# uj9keDhtX6nfIqkj7bkoxevF1r+xF7nfy63QjijyO3v7SepjQVg2GX8inmwNSRQv
-# tCWWArICERfbPXETFLzXVepUqdT+PckNNTcxZsAa+qtOEidmHnqF2vEgKWg9DtS7
-# UxxuT3YoNieNf0v1DWfvm+joeAAw5yFLX+zCd8GCAFQ4bek66W2Ggi+vTWdHUSBF
-# UzeHiMuXL7lEtIvt3osXdYw7K3O2+iGeU/06METo6/bzNTzYOCM8665r20sTHjnf
-# Kge5wC2sKfYbW+LKvwuQSQAcykgasoSAtd8601vAnD9XpFW6now0yByLhpYR/VHg
-# lVN6HHyDyEC+ymd/rS2UoFNLU55BYONBqAs+O6OgU9y2kn9cuJPtSAsp6DZYmax4
-# GIJeaDEYgw8D7Ula+gkS9qr3WbFjDMP4Nf8Z6vtkOPQuOYX2tGyx15CT4qj20ba8
-# UdkMiMOHDgQTmabuDw+n8bK5+RJOOP7KiQn9s3vbXkgmGXahggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCDhcSOF0TB7Ko5yTR+mFPWA
+# Mc528diKLrOxGvb9nYp1FDANBgkqhkiG9w0BAQEFAASCAYBlSRVhkJYjJVYdYhg2
+# TCH+wIUzV9HLsWD4JgKHzjq6wTROIXfG46wNVNJL3n/8aMLsPr3c5D5B8twLmWqk
+# +ABMfO1LYjelrnzjeQJLjfkdQwQDUkmhgwTEZNjME1SeizF5iLt6HIwNDEhIAe6T
+# fB9ofKgIyP/o13qfeJ7F66W8A5v6oceI8XJLOuZcG+zQdIv8YEWRDkRedAwTEfj6
+# jvtg8X+IbO4TiOUP2w1LU5O7ggyyogbSW0KQ4dRlKmyEV0BPW6uyTXZ3XgTU8IpV
+# AWE3r3p17C1urdZTB1mtoPQj5OSDZSbM8R1NWEyTH1ILrPhoQqjrKbIkTt/5zmVL
+# kkR3lEaXxj49ZNBnDxgHLYlO0nQFx7UUlf/qnWkzei98ZH0+dwb0H43ns6APbYpZ
+# OrCLmHzlDrZBDsiTugQTBSexlMPCGkkQJQreO1G0XkK/LeAOgI4ntpEWZSdHNL9Y
+# By+e+4Zb+iDv5WV4Ts/dJ5kwr0MIaPz8U+nN98d6wE4aSkGhggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIzMDEyNTE1MzYyNFow
-# PwYJKoZIhvcNAQkEMTIEMEom9T9bG631qYRy+DSvXrssCFAEKRUIGuwnxXKtDAJ9
-# 3YeivDw/7ft+LLQg+LjCtTANBgkqhkiG9w0BAQEFAASCAgB9S9hg5Cs4eVgkgF3g
-# XLGK3MtszZ7xIl4H/OAa89guhJ3PHr/F+0trpOeZhZVe1Cg1apGGuOIwvOin/zBP
-# A+5Qaqh5vZM3qLzph8gNAMIxp5Ko+xrpOZrwLR2rn8X/IxOrhy9v0MPYjPqw88at
-# QcKmUSZZE8x2bj5CY1Gcrplr67ccvabAb6jCPx/3/wO7BwNroUtf+ba3mCKHvjNx
-# hrSmz/lMBoDI0xI7y3zdj6D8EXxZ4BgqbkvFwAZ7hU+CdqwFiQgCvTMbwAGhdZOQ
-# avo0PURbbxdvTHsRN3pP3I1iQJcVTv77sirJ22L1N9Ep46GRdJ3cnN8P7Bx3iIf1
-# /C1sZxiJyHW+Za8JKgVM4eDw3Y6ULXh7Ujj33x0YF25KSupYTcbVt87t6FRe5Co0
-# sQvw69bT6tu78fK06NmXMaWZ6/AqCs8bjy6sH7IpnfkuOWbhXeomZFVCxKuxAucR
-# gshtnwvpE+Y0AC04z6Lq48cPgFcWUe8Ea0LxfQqFdDXWfBHCwceF0rF2pKlhokV9
-# 7x3xaYqdPN0yKV3r/UoOKsUiOoPVKSTFqzAikuR6IfyovdfwhsAJ2NlWuWZej/0Y
-# FGp0spC4U9vhLSThtvc8BcUiPFl5G9UajbSsMGDutfgNOQMaZU4z3H0hNZJ3rVDh
-# ikP/Fnu0mI40yTMhNLNJCZ9j7g==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIzMDEyNTA0MzUwMlow
+# PwYJKoZIhvcNAQkEMTIEMBDybjHzInX4uVOJOpU2+1z+lQWC3Qi18cw/1kUsD9hm
+# fQXuoFgDnsbhtp/MGDwuaDANBgkqhkiG9w0BAQEFAASCAgBqmBFdoBI01joHWdjp
+# BSp866OiwLc2hk8gPQAjCfHaDW0XJS7afw2WMDkGbgn7HAKTdLr3PmHx+FM643lm
+# PIoZegrdkrNps4ue2SbdU6atQ3WPxWqKbMHHHrlgoMWsRIBWltlxCtLUFYyt4jNj
+# hb6z9cAul0CD3rYzcOfV+PV9UuMpKb/kqnEaK6MNyMseSkTGuNaleQHBGGIZkMKO
+# ID+0mj8E9OEhKv3HW0wV47Fqsvgt4KpehHoh18811ZYwhIBREKFHTaWbfdHOFctx
+# QCL+Cg2swoYFd/vsVo4AC/271wSjJNdlbDcacoVU2Uv1xNIdck/KB6qgUzPgyCAt
+# is0d2grKd3tB3XTxFdXaQSzyi/IQ+NTEB8eVMl5LZvzlc28J8Nq1IQby7bbJyeCg
+# d2hu4U7GWpU9+W7Gd6kaooetdiYO6oSgoqvKS6rfnu6jjAECoZ1ldt+jMbLmZEGz
+# 3laHTYaOTuJOGdH40I7YuHUW7NI59qiVbiFCWegP+n1GrXF0oGhWu40U7RoArNwj
+# J1dIF4N5GsQUAZCMl1cwQ/y51pxyKrwsnSsEhEUKNE3278PCZAgoqg7p/cVOV9cD
+# eFmOrbdjxjd2i13nvbSBiTR5iqZRfuPyUes4snIN4HK7KrzE/HXzGtA1tKhG+sKc
+# eOHd88q8RxBg+k7uoimQuziazw==
 # SIG # End signature block

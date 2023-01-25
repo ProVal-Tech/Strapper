@@ -1,26 +1,66 @@
-function Write-InformationExtended {
+function New-SQLiteLogTable {
+    <#
+    .SYNOPSIS
+        Creates a new SQLite table specifically designed for storing Strapper logs.
+    .EXAMPLE
+        New-SQLiteLogTable -Name 'myscript_logs' -Connection $Connection
+        Creates a new Strapper log table named 'myscript_logs' if it does not exist.
+    .EXAMPLE
+        New-SQLiteLogTable -Name 'myscript_logs' -Connection $Connection -Clobber
+        Creates a new Strapper log table named 'myscript_logs', overwriting any existing table.
+    .EXAMPLE
+        New-SQLiteLogTable -Name 'myscript_logs' -Connection $Connection -PassThru
+        Creates a new Strapper log table named 'myscript_logs' if it does not exist and returns an object representing the created (or existing) table.
+    .PARAMETER Name
+        The name of the table to create.
+    .PARAMETER Connection
+        The connection to create the table with.
+    .PARAMETER Clobber
+        Recreate the table (removing all existing data) if it exists.
+    .PARAMETER PassThru
+        Return an object representing the created (or existing) table.
+    .OUTPUTS
+        [pscustomobject] - An object representing the created (or existing) table. Will only return if -PassThru is used.
+    #>
     [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)][Object]$MessageData,
-        [System.ConsoleColor]$ForegroundColor = $Host.UI.RawUI.ForegroundColor,
-        [System.ConsoleColor]$BackgroundColor = $Host.UI.RawUI.BackgroundColor,
-        [switch]$NoNewLine
+    param(
+        [Parameter(Mandatory)][ValidatePattern('^[a-zA-Z0-9\-_]+$')][string]$Name,
+        [Parameter(Mandatory)][System.Data.SQLite.SQLiteConnection]$Connection,
+        [Parameter()][switch]$Clobber,
+        [Parameter()][switch]$PassThru
     )
-
-    $message = [System.Management.Automation.HostInformationMessage]@{
-        Message = $MessageData
-        ForegroundColor = $ForegroundColor
-        BackgroundColor = $BackgroundColor
-        NoNewLine = $NoNewLine.IsPresent
+    $targetTable = Get-SQLiteTable -Name $Name -Connection $Connection
+    if ($targetTable -and !$Clobber) {
+        Write-Verbose -Message "Target table '$Name' already exists. Pass -Clobber to overwrite this table."
+    } else {
+        Remove-SQLiteTable -Name $Name -Connection $Connection | Out-Null
+        $createCommand = $Connection.CreateCommand()
+        $createCommand.CommandText = @"
+        CREATE TABLE "$Name" (
+            "id"        INTEGER NOT NULL UNIQUE,
+            "level"     INTEGER NOT NULL,
+            "message"   TEXT NOT NULL,
+            "timestamp" DATETIME NOT NULL,
+            PRIMARY KEY("id" AUTOINCREMENT)
+        );
+"@
+        $rowsAffected = $createCommand.ExecuteNonQuery()
+        Write-Verbose -Message "Affected row count: $rowsAffected"
+        $targetTable = Get-SQLiteTable -Name $Name -Connection $Connection
+        if (!$targetTable) {
+            Write-Error -Exception ([System.Data.SQLite.SQLiteException]::new([System.Data.SQLite.SQLiteErrorCode]::IoErr, "Failed to create table '$Name'"))
+            return
+        }
     }
-
-    Write-Information -MessageData $message
+    if ($PassThru) {
+        return $targetTable
+    }
 }
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDBjpvitJCrACU4
-# PFLiBa/1qdKe3vNtanyzHbg8k/aQbKCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAhu/HAlXSK4Yop
+# /Q3veVDezPF91g50qb8BWFdYYXzukqCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -200,32 +240,32 @@ function Write-InformationExtended {
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCAlorvHXZ2wk4Ga7eZq6RBL
-# irR9mErHtqXWr9duUC0KkzANBgkqhkiG9w0BAQEFAASCAYCQ8q7PrefVXMZtIlbr
-# jta2o7jcqDymSMIQh4U/iRZht7HovTixOeju/3hvmuQP++sNdmYABvbX808POf2g
-# BjxlVwNQwLlgqpJLUpU7FVeQQM6h/IQgAauDcEHT/9RtL9st0QTi4r2lZX5ZBXcP
-# +9UyIPpER2+xcbn00xYXB4KtrESmdn0xlk1Bwu9jcRpHlPcskCGKvZKeCzwdNbZD
-# drEQ1HTD/grR2jnZwrVEmybtM4YqwYOF8lOCGsDG8jVE1eaBGXMYXlfkCLoixjFb
-# GJLmbp9oaFNX1wxtoSaUm/ZUvBn1MDf3mcOwLB0Nq0uBcqCAJRDrHw7ZA+jA1iz2
-# ddIjsdX6rbAwNnfBHPmpQREPBGUCECiCHcvzOmmyCfVIFtaPHWGDrv1S+nvxmEu+
-# UREG5CUZJcrHiki7l6+NBXE8aZPgRpDjlKnYSo8/9HWQsidWlxyy/WkHfDljWGIV
-# RPPiCgyTzXN04fcPVkVM47jdSsD3vTY7ZEV4hs+aIZbAoTOhggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCCZPHZ+gGoEqDxmce1kbwcl
+# h4vn6+AnHizXcmwM8yIdyTANBgkqhkiG9w0BAQEFAASCAYA4r2DfTkTcQ7JyLXwk
+# eCpeG2+WmN1Op+6wOYjWejIqHle3l5OJhX5hrPgSDV6osg6XrRpjvbGJIC95jxFy
+# OEEA0KlYBVEweTi0ENdYeJtJXsnssdMel0XZx2PpSsx56cu5f/WhodzVsEttvQ7/
+# ngvk94gW/KVa6TQjrIFEbSpqFpeFCKpDxIw0vujutJGYZ/vlbCG5O/BlZqoOf+9n
+# eJuFc1t4BE5xahsO4m0tFBXTeYrxE8dKzACvCzh2FM0WgURMy2WbRJJ+VrHGqwBk
+# m2yXF+c0UwggYAdpPj1P3FVr2bB4BAfaR3nT9781rJL8gTfqvxSceFt8BHPpZtps
+# DhqLTHJzbsoNYD+2gudBb55uEuZBWi0/F+ff8yR9o3cSwZMXrsytnkvkfsUlXnPN
+# m92KO9kma+7eqzir4Hrb++s9OyGFevMh5lvzlz0wSNI/ih+6yNjwVogBUNrreMwt
+# JC+7PELRefnIkDSwChumXzSdcxA7VmQGEumZSJq5SLrQ7EahggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTgxMlow
-# PwYJKoZIhvcNAQkEMTIEMCwVA3hUTopzYZZh0TopjHqo163Ai9GRZu7JDEfhwL4C
-# MST4IzyfLol1ukX0yU/AKDANBgkqhkiG9w0BAQEFAASCAgABrjxstLFeKN4JQC7o
-# Auv9u8CCCnDHAVVP8iiHZyfqD5kvgWE98bZPBYGUMsoU8rkg0GsGEk+YB+OQTqpM
-# c2BTBSmWkumpzp/E5xlPDPM5a6Ke2j4vWHORCil2YOVUtSg80uWGNdU4jvjYnJcg
-# KQCu6AVCScJo5XM4cdyZC8I60LIZKoajxzOiaTQ39XCSR8JSrCX4M9EChBZTwAmQ
-# DZj7qefIJNj9NxHAUS+CZNCBuD1RDdPYpeKmpnBE9ZNYfCObwy6Fy84XJgkEjObC
-# HMcCwGPoo8Si8ZL4S488pfN8yxOw6CbXL/l9suE7FetukFZg4SZDEQs44bze3X9x
-# raqscN/NGpeciH1xJc6f29VTFZXlnV9h5dmCsQ9yzudKCcNN/4POSTHU+WkHOg07
-# aGwW0qW+L1sALABsvWfVXDrPdcxxoidRDwQJ0e0aqB/APSe8a5N0/rEBWV6OyARn
-# bz4GUKGI64K7TZOby341t/ostMpW4JBQM9i//jbbPQpL43jcskyX5w7ENWtALrRx
-# ZqUyOviXkVkKkaXVjmcFNFiQwKjmq3V/cEs+PNj1BKHe/F1pl7zD8QoUGbNfWoP/
-# Y78haygVY9U5/R+C0la7gCI58151Bc1izMPSI3VeHiwaKdPR2ut337wtiB42PIaG
-# 869JTxV58HP3lHVyGwh9fVvUbA==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIzMDEyNTA0MzQ0N1ow
+# PwYJKoZIhvcNAQkEMTIEMPrV+Ue1uIbAK4/3VHmvEsrDhGYxZAXlDzvnkLoXMHFz
+# A92mg4CaIyqMcNpm2S9cWTANBgkqhkiG9w0BAQEFAASCAgCMDlCYSis8kaAHwA1L
+# VrkQUMgMOoc9MTINQPYm5gofEqK74deirma+TGnGMamUQb48envfHe2UcDE5etTF
+# yeMzILsXg1psJMgW+/hhfx94QO2MOnSF8/zpo2UY/4k3nwvOqFV46Nvtw5O9s/H/
+# wBPbBw/viksEEy4YkTscMsqccSs3nrw187YVuTjqQNEyUmFItEkn860MUB1CluIv
+# 0x4amHtG/R2AgotTXkRuD/hcKaTDWznJK0kqIQ03QftF56V+UK51ckSyflsIr1sk
+# nBjC+3j2m68JpdnSZeAk5isIUiQHOUMyS+4ubyD6PG3uHNceEyTXWMyrtnbSFctZ
+# 9+Wplx3Z2eJyqbLiUsRSGp7BHvx5U0QvvzvIeT1wwLY1+ksAdxk9JG1KPJIimklE
+# 6z5zcZAd01N4uYOXNTMYQEgSvxHZ9XSgYLf69HXg63ExKad50+54q3dTpYjtuA5M
+# iOFcs8IPCd5HztdOJFKrX7B53Ud3IyfaNnMo+9Rn1c3nRMfNPTp1NG9anNe/WGMu
+# OF501HRd4ftjIsNQS5dWcxL1QGfszf7krQXDwhmuCRFURRJS8foyolJKM3iVncSX
+# 765n8g8kjP8RIVypjmNMI8zH4ftgiojiOVN1Tmz6/n0c8+l0JA/uw4SXzbfyQL3F
+# DN7BMCCxn7OKJSvv3m5Yrgno+g==
 # SIG # End signature block
