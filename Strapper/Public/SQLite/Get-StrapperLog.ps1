@@ -19,7 +19,6 @@ function Get-StrapperLog {
                     Information
                     Debug
          Lowest --- Verbose
-
     .PARAMETER TableName
         The name of the table to retrieve logs from.
     .PARAMETER DataSource
@@ -37,6 +36,10 @@ function Get-StrapperLog {
     )
     # Casting here instead of in the parameter because PowerShell modules don't support the export of classes/enums.
     [StrapperLogLevel]$MinimumLevel = [StrapperLogLevel]$MinimumLevel
+    if($TableName -ne $StrapperSession.LogTable) {
+        $TableName = $TableName -replace '^', $StrapperSession.ScriptTitle
+    }
+
     [System.Data.SQLite.SQLiteConnection]$sqliteConnection = New-SQLiteConnection -DataSource $DataSource -Open
     if (!(Get-SQLiteTable -Name $TableName -Connection $sqliteConnection)) {
         Write-Error -Message "No log table with the name '$TableName' was found in the database '$DataSource'" -ErrorAction Stop

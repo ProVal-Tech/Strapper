@@ -7,19 +7,15 @@ function Write-Log {
         This will write an error to the console, the log file, and the error log file.
     .PARAMETER Text
         The message to pass to the log.
-    .PARAMETER StringArray
-        An array of strings to write to the log.
-    .PARAMETER Type
-        The type of log message to pass in. The options are:
-        LOG     - Outputs to the log file and console.
-        WARN    - Outputs to the log file and console.
-        ERROR   - Outputs to the log file, error file, and console.
-        SUCCESS - Outputs to the log file and console.
-        DATA    - Outputs to the log file, data file, and console.
-        INIT    - Outputs to the log file and console.
-        Default (Any other string) - Outputs to the log file and console.
-    .NOTES
-        If this function is run on the console then it will output a log file to the current directory in the format YYYYMMDD-log/data/error.txt
+    .PARAMETER Level
+        The log level assigned to the message.
+        See https://github.com/ProVal-Tech/Strapper/blob/main/docs/Write-Log.md#log-levels for more information.
+    .PARAMETER Exception
+        An Exception object to add to an `Error` or `Fatal` log level type.
+    .PARAMETER ErrorCategory
+        An ErrorCategory to add to an `Error` or `Fatal` log level type.
+    .LINK
+        https://github.com/ProVal-Tech/Strapper/blob/main/docs/Write-Log.md
     #>
     [CmdletBinding(DefaultParameterSetName = 'Level')]
     param (
@@ -43,7 +39,8 @@ function Write-Log {
         $StrapperSession.LogPath = Join-Path -Path $location -ChildPath "$((Get-Date).ToString('yyyyMMdd'))-log.txt"
         $StrapperSession.ErrorPath = Join-Path -Path $location -ChildPath "$((Get-Date).ToString('yyyyMMdd'))-error.txt"
     }
-    
+
+    # Accounting for -Type to allow for backwards compatibility.
     if (!$Level) {
         switch ($Type) {
             'LOG' { $Level = [StrapperLogLevel]::Information }

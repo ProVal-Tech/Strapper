@@ -25,7 +25,7 @@ function New-SQLiteObjectTable {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][ValidatePattern('^[a-zA-Z0-9\-_]+$')][string]$Name,
-        [Parameter()][System.Data.SQLite.SQLiteConnection]$Connection,
+        [Parameter(Mandatory)][System.Data.SQLite.SQLiteConnection]$Connection,
         [Parameter()][switch]$Clobber,
         [Parameter()][switch]$PassThru
     )
