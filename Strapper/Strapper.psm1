@@ -17,14 +17,14 @@ if ($MyInvocation.PSCommandPath) {
     $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-log.txt"
     $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$($scriptObject.BaseName)-error.txt"
     $StrapperSession.ScriptTitle = $scriptObject.BaseName
-    $StrapperSession.LogTable = "$($scriptObject.BaseName)_logs"
+    $StrapperSession.LogTable = "$($scriptObject.BaseName)_log"
 } else {
     $StrapperSession.WorkingPath = (Get-Location).Path
     $currentDate = (Get-Date).ToString('yyyyMMdd')
     $StrapperSession.LogPath = Join-Path $StrapperSession.WorkingPath "$currentDate-log.txt"
     $StrapperSession.ErrorPath = Join-Path $StrapperSession.WorkingPath "$currentDate-error.txt"
     $StrapperSession.ScriptTitle = $currentDate
-    $StrapperSession.LogTable = "$($currentDate)_logs"
+    $StrapperSession.LogTable = "$($currentDate)_log"
 }
 
 if ($StrapperSession.Platform -eq 'Win32NT') {
