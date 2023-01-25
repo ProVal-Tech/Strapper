@@ -54,9 +54,23 @@ Write one or more objects to a Strapper object table.
 ### [Get-RegistryHivePath](./docs/Get-RegistryHivePath.md)
 Gets a list of registry hives from the local computer.
 
-### [Write-LogHelper](./docs/Write-LogHelper.md)
-Helper function for [Write-Log](./docs/Write-Log.md).
+### [Get-SQLiteTable](./docs/Get-SQLiteTable)
+Get table information from a SQLite connection.
 
-### [Write-LogInformationExtended](./docs/Write-LogInformationExtended.md)
-Helper function for [Write-LogHelper](./docs/Write-LogHelper.md) that allows for colorization of `Write-Information` output in the console.
-#TODO: Make links to private functions
+### [New-SQLiteConnection](./docs/New-SQLiteConnection)
+Get a new a SQLite connection.
+
+### [New-SQLiteConnectionString](./docs/New-SQLiteConnectionString)
+Get a new a SQLite connection string.
+
+### [New-SQLiteLogTable](./docs/New-SQLiteLogTable)
+Creates a new SQLite table specifically designed for storing Strapper logs.
+
+### [New-SQLiteObjectTable](./docs/New-SQLiteObjectTable)
+Creates a new SQLite table specifically designed for storing JSON representations of objects.
+
+### [Remove-SQLiteTable](./docs/Remove-SQLiteTable)
+Removes a SQLite table from a target connection.
+
+### [Write-SQLiteLog](./docs/Write-SQLiteLog)
+Writes a log entry to a Strapper log table.
