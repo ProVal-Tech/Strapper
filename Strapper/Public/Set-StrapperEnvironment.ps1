@@ -1,27 +1,23 @@
-function Set-StrapperEnviornment {
+function Set-StrapperEnvironment {
     <#
     .SYNOPSIS
         Removes error and data files from the current working path and writes initialization information to the log.
     .EXAMPLE
-        PS C:\> Set-StrapperEnviornment
+        PS C:\> Set-StrapperEnvironment
     #>
-    
-    Remove-Item -Path $StrapperSession.DataPath -Force -ErrorAction SilentlyContinue
     Remove-Item -Path $StrapperSession.ErrorPath -Force -ErrorAction SilentlyContinue
-    Write-Log -Text '-----------------------------------------------' -Type INIT
-    Write-Log -Text $StrapperSession.ScriptTitle -Type INIT
-    Write-Log -Text "System: $([Environment]::MachineName)" -Type INIT
-    Write-Log -Text "User: $([Environment]::UserName)" -Type INIT
-    Write-Log -Text "OS Bitness: $((32,64)[[Environment]::Is64BitOperatingSystem])" -Type INIT
-    Write-Log -Text "PowerShell Bitness: $(if([Environment]::Is64BitProcess) {64} else {32})" -Type INIT
-    Write-Log -Text "PowerShell Version: $(Get-Host | Select-Object -ExpandProperty Version | Select-Object -ExpandProperty Major)" -Type INIT
-    Write-Log -Text '-----------------------------------------------' -Type INIT
+    Write-Log -Text $StrapperSession.ScriptTitle -Level Debug
+    Write-Log -Text "System: $([Environment]::MachineName)" -Level Debug
+    Write-Log -Text "User: $([Environment]::UserName)" -Level Debug
+    Write-Log -Text "OS Bitness: $((32,64)[[Environment]::Is64BitOperatingSystem])" -Level Debug
+    Write-Log -Text "PowerShell Bitness: $(if([Environment]::Is64BitProcess) {64} else {32})" -Level Debug
+    Write-Log -Text "PowerShell Version: $(Get-Host | Select-Object -ExpandProperty Version | Select-Object -ExpandProperty Major)" -Level Debug
 }
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCstporL0KWX2Nv
-# mXXQ6oGRiHbAynEx8o/W5b0xabchyKCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBk4ic9S7gx+Fyd
+# TNgVfuLsfaosxPAfYa3diavFRgu3C6CCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -201,32 +197,32 @@ function Set-StrapperEnviornment {
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCAnNinmi12Ykp49EfazbCAi
-# mcTCG9MrdhkZAZz82x+M7jANBgkqhkiG9w0BAQEFAASCAYA1xj0BiHF5DQMGrrcV
-# YpgVJaRYYgyInacncRWjvYnODzvvLZN/GJPRc/l16ES0ZkmV9b8m1H+zljp1pzEY
-# d1DzdJD3kT9Bxsb4WeWo3J93mtB4BWUs/6FG54/0jsqLPyF/lH8PxbyE6t42t+uw
-# NdYo2WE07wIxM9meHHFbzS3SYcJrRljlpve7ou5hpUOc9/JmTYynhRnpv24lQYqU
-# dg0O9WMC6okAAiBPr+d3HApJUEmkalqJjMCffiWIfKXBfs/GP3tdddiTquZuOX+c
-# njeUXGASZBwFLz5H0EmMhI64dJ/dfILNxWAEe0NRuUqUl6ErrZAPME5znvd8U95z
-# fDOaXOnlYdimhP5rK5+RPhjYUq3mZYbK0fmACh4G1LeOsrZOTlQbNB2CzMG21ITI
-# p4tyS/NCOOfeLmU8gu6f1X84ObfWdspd8+iVQPZnRB61hXsB+PIYsAbE9KsBInYz
-# owrNvnAUsG7vC10Hxk606FVdAcB8KeXJ+yqldHZT4pU+i0WhggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCCbgfzpDKTLIiSzjhlKPfu0
+# xDutssp4W06moRYF4ReadjANBgkqhkiG9w0BAQEFAASCAYBcCtNcKbxwamT3oAIx
+# wgFYosRMWW29Tlir0HIkHOh9nKujdJTagtDe9fLaQ5+RfRHsP9G7pYfAMyNcMNya
+# GTyyY82Wy6mai+UewxVmoFmP9AXf26sVDf8qKXBakSyS8xwOCAJ0Bje65xjI6cfs
+# Xkq34Pr88fhx4aXuIBtmv6yAWVnTjaumZO3uo1ahRw+PXw/gvAUs84nvgDGzwiXc
+# QgHf8r9zmmCgsl93Su2qKAbiGeZm5WUKidpNeBJWodVPoqk1xKpFexXkK+O0kLB2
+# X3EOhVGQmqaaTMySoqrV57TS9b04S/m2M+oGe3S4B4WjIB+4ilKYHZ6gJLnpAnNM
+# QWU9CZf4oU5zo4TqYRHs4jwptKz1LUXIT84ut6TRUv/sru4Zans6BydJ2cTzq6F+
+# RJlSbtTgdl9tlHsmtWfWPa9+AdBhYzCRUw+1gxw+J4cQwMqA8ETrJTzKMXZ+Ggxr
+# +DHbW4fGwgc/qnmrEGp1KCzBmCKJK6MRVXNLJNNt4lduoSihggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIyMTIxNTE5NTgzOVow
-# PwYJKoZIhvcNAQkEMTIEMDeXfpPQ8leqbBBO8XqoZ/NvltdX7XJt6to4YWqfPYvV
-# eRheDE3PduHLx4e3iG7imzANBgkqhkiG9w0BAQEFAASCAgBMkpISqpe6H0ieVWel
-# DXNDpbwHBAqW4nbtgYmkXMCDrT/d8d4a1McTxx6CpFoFfBK8CCVzN5rVj4ZtIIeV
-# fXZrzzH1aY3cTssg4oT9yDpCoXrVBD8PiVXzV14fgjOhchkPKEXqGaowd3/Rx9Xq
-# 1CX7NRWf42p1d35asn+2iJ+4m0W2/oCZ0U35TZ+21GWHq2svrP60uLTkJtfrZWI5
-# 3FkRuC4wC0OdAabNfhvSp5I/LEqo++2dQib4krnkSvtI1MOXPqiaOvOWO18Z4qiw
-# kCFoQWO++1Wm/9ZTD4tHeIbtEp89nsm7IcJHI17DDJhAlafLlvdMsxYnEH9iEuq9
-# UDXp5ujLKgGkY2JxJQCFwucOh0NLibkHCHJmwnDALTl3Ny8ga3+jaQu7LK7vRQ5x
-# iuTOcdykJ1t+NEeRmC9I/ExQ0w/tHFFJhZ+EzwCkPlQhkOgLh9PSx2joUm3cwDqq
-# mNITT3/g0xetcVewOkEI8pQvQRg3fCtfTBH41XGQ6t0vKIuax8WEIziBZLa0qBKi
-# yydaA3BkpSkRuvZETFTDyY7qvdNhB8mc/jbv9RDjNWMoGxrnt5r+RtT8DoAZ+CuQ
-# dd6nNm+h0uDXN0C4HTTxNugWmzemrUNxLrdWK6lRpwJO6K2qLjAUZ1pVvL1bEWNy
-# wIrKL+o+wSCTBJhrttgppEI52g==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIzMDEyNTE5NDgyOFow
+# PwYJKoZIhvcNAQkEMTIEMMF4ctDLc7N8V61tja9V+g5Z5QjyhMhDwuX6FullXlcp
+# K0GmcpmIGyWb/UvIzmmlOzANBgkqhkiG9w0BAQEFAASCAgBo5rtdbTjAS+11S1pv
+# dUyykrzJPeuMOlX5CLg3C0pcTFrjRaYskFZrAZ16iWGN6cV7XcxK43mpv3+kn3SK
+# RouqqmJBVEkuNjz9oN3AN+A83HKdWUusUr99r2BgGz2B1SrZjX0h9xL4n23j1XZ5
+# XiHI7ezIYUI7vj8vTMathtKDlcp6lwn2TIoe2nEA09mSBVgqLrvIRLt/v9W/+FJS
+# pA9NpOjT05b0f/NTAIV3NW7Ae1zK814X8UL8dtu6Aylv8I/Vce9g9EeY2hcKii5K
+# 0FwErM3kR+O4qyfav3ahjsZi2NNjCDYsJ6bVdjEGMqGAq3w4jVb9+ZGOFvetYo5o
+# xBqvmfI9b3CcZ6UsNh2RKpVJkz7j7UJI8M8zCFQHBM39MC3cMVybNYQbG31NAwG7
+# EV5E+qfZrYjG31gJfyF/oxgg2uYr2xRiHG9TYCXebhlbMSOP0qUW3tkoXb+rEshk
+# YDtnTZikz3jETCN9KC0MD6bHF0Y24sVIUYKaASv2EeY4CwygGw0nmh5eij5KYjP/
+# 4Dkbrig9vHhLeUcI4L9ntJoBacGHBlM4oUiuDHar5VHBRojuIf74yCqN+M1e9AML
+# BdaxoBahtVRute41aFfu5Hvqraw6Gl07BPuqXYfYa7bkDLO48h2W9JNUCMSXAIQC
+# hJIIs/0Zwol0l0D1NBzcLI7awg==
 # SIG # End signature block
