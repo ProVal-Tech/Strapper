@@ -22,7 +22,7 @@ Outputs a log to the following locations:
 - Database Table: `Test-WriteLog_log`
 ```powershell
 # Running from inside Test-WriteLog.ps1
-Write-Log -Text "Hello world!" -Level Information
+Write-Log -Level Information -Text "Hello world!"
 ```
 
 Outputs a log to the following locations:
@@ -32,7 +32,7 @@ Outputs a log to the following locations:
 - Database Table: `Test-WriteLog_log`
 ```powershell
 # Running from inside Test-WriteLog.ps1
-Write-Log -Message "Error!" -Level Error -Exception ([System.IO.EndOfStreamException]::new("Error!")) -ErrorCategory ([System.Management.Automation.ErrorCategory]::ParserError)
+Write-Log -Level Error -Message "Error!" -Exception ([System.IO.EndOfStreamException]::new("Error!")) -ErrorCategory ([System.Management.Automation.ErrorCategory]::ParserError)
 ```
 
 Outputs a log to the following locations:
@@ -56,7 +56,7 @@ Path
 ----
 C:\Users\User\Temp
 #>
-Write-Log -Text "Hello world!" -Level Fatal
+Write-Log -Level Fatal -Text "Hello world!"
 Test-Path -Path 'C:\Users\User\20221215-error.txt'
 # True
 Test-Path -Path 'C:\Users\User\Temp\20221215-error.txt'

@@ -36,5 +36,5 @@ Strapper is primarily intended for use inside of another script, but it will wor
 Import-Module Strapper
 
 # Writes to the log file, the Information stream, and the Strapper database.
-Write-Log -Message 'It works!'
+Write-Log -Message 'It works!' -Level Information
 ```

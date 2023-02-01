@@ -30,19 +30,19 @@ function Invoke-Script {
         $baseFileName = ([System.Net.WebRequest]::Create($Uri)).GetResponse().ResponseUri.Segments[-1]
 
         if($baseFileName -notmatch '\.ps1$') {
-            Write-Log -Text 'This function only supports invoking .ps1 files.' -Type ERROR
+            Write-Log -Level Error -Text 'This function only supports invoking .ps1 files.'
             throw
         }
         # Download the file from the URI.
         if ([System.IO.FileInfo]$downloadedFile = Get-WebFile -Uri $Uri -Path "$env:TEMP\$baseFileName" -PassThru -Clobber) {
             $targetScriptPath = $downloadedFile.FullName
         } else {
-            Write-Log -Text "Failed to download file from '$Uri'" -Type ERROR
+            Write-Log -Level Error -Text "Failed to download file from '$Uri'"
             throw
         }
     } else {
         if($uri.Segments[-1] -notmatch '\.ps1$') {
-            Write-Log -Text 'This function only supports invoking .ps1 files.' -Type ERROR
+            Write-Log -Level Error -Text 'This function only supports invoking .ps1 files.'
             throw
         }
     }

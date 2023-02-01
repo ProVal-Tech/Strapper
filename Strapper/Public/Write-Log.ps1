@@ -3,7 +3,7 @@ function Write-Log {
     .SYNOPSIS
         Writes a message to a log file, the console, or both.
     .EXAMPLE
-        PS C:\> Write-Log -Text "An error occurred." -Type ERROR
+        PS C:\> Write-Log -Level Error -Text "An error occurred."
         This will write an error to the console, the log file, and the error log file.
     .PARAMETER Text
         The message to pass to the log.

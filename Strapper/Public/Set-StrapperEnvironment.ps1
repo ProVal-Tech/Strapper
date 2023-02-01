@@ -6,12 +6,12 @@ function Set-StrapperEnvironment {
         PS C:\> Set-StrapperEnvironment
     #>
     Remove-Item -Path $StrapperSession.ErrorPath -Force -ErrorAction SilentlyContinue
-    Write-Log -Text $StrapperSession.ScriptTitle -Level Debug
-    Write-Log -Text "System: $([Environment]::MachineName)" -Level Debug
-    Write-Log -Text "User: $([Environment]::UserName)" -Level Debug
-    Write-Log -Text "OS Bitness: $((32,64)[[Environment]::Is64BitOperatingSystem])" -Level Debug
-    Write-Log -Text "PowerShell Bitness: $(if([Environment]::Is64BitProcess) {64} else {32})" -Level Debug
-    Write-Log -Text "PowerShell Version: $(Get-Host | Select-Object -ExpandProperty Version | Select-Object -ExpandProperty Major)" -Level Debug
+    Write-Log -Level Debug -Text $StrapperSession.ScriptTitle
+    Write-Log -Level Debug -Text "System: $([Environment]::MachineName)"
+    Write-Log -Level Debug -Text "User: $([Environment]::UserName)"
+    Write-Log -Level Debug -Text "OS Bitness: $((32,64)[[Environment]::Is64BitOperatingSystem])"
+    Write-Log -Level Debug -Text "PowerShell Bitness: $(if([Environment]::Is64BitProcess) {64} else {32})"
+    Write-Log -Level Debug -Text "PowerShell Version: $(Get-Host | Select-Object -ExpandProperty Version | Select-Object -ExpandProperty Major)"
 }
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor

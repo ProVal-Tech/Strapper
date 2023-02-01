@@ -84,7 +84,7 @@ function Set-UserRegistryKeyProperty {
     $returnEntries = @(
         foreach ($profile in $ProfileList) {
             if([string]::IsNullOrWhiteSpace($profile.Username)) {
-                Write-Log -Text "$($profile.SID) does not have a username and is likely not a valid user. Skipping." -Type WARN
+                Write-Log -Level Warning -Text "$($profile.SID) does not have a username and is likely not a valid user. Skipping."
                 continue
             }
             # Load User ntuser.dat if it's not already loaded
@@ -117,7 +117,7 @@ function Set-UserRegistryKeyProperty {
                     Value = $returnEntry
                 }
             } else {
-                Write-Log -Text "Failed to set the requested registry entry for user '$($profile.Username)'" -Type WARN
+                Write-Log -Level Warning -Text "Failed to set the requested registry entry for user '$($profile.Username)'"
             }
 
             # Collect garbage and close ntuser.dat if the hive was initially unloaded
@@ -127,7 +127,7 @@ function Set-UserRegistryKeyProperty {
             }
         }
     )
-    Write-Log -Text "$($returnEntries.Count) user registry entries successfully updated."
+    Write-Log -Level Information -Text "$($returnEntries.Count) user registry entries successfully updated."
     return $returnEntries
 }
 # SIG # Begin signature block

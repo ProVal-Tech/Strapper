@@ -48,7 +48,7 @@ function Remove-UserRegistryKeyProperty {
 
         # If the entry does not exist then skip this user.
         if (!(Get-ItemProperty -Path $propertyPath -Name $Name -ErrorAction SilentlyContinue)) {
-            Write-Log -Text "The requested registry entry for user '$($profile.Username)' does not exist." -Type LOG
+            Write-Log -Level Information -Text "The requested registry entry for user '$($profile.Username)' does not exist."
             continue
         }
 
@@ -63,9 +63,9 @@ function Remove-UserRegistryKeyProperty {
 
         # Log the success or failure status of the removal.
         if ($?) {
-            Write-Log -Text "Removed the requested registry entry for user '$($profile.Username)'" -Type LOG
+            Write-Log -Level Information -Text "Removed the requested registry entry for user '$($profile.Username)'" -Type LOG
         } else {
-            Write-Log -Text "Failed to remove the requested registry entry for user '$($profile.Username)'" -Type ERROR
+            Write-Log -Level Error -Text "Failed to remove the requested registry entry for user '$($profile.Username)'"
         }
 
         # Collect garbage and close ntuser.dat if the hive was initially unloaded

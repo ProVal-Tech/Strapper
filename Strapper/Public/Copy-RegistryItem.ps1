@@ -42,19 +42,19 @@ function Copy-RegistryItem {
     }
 
     if ((Get-Item -Path ($Path -split '\\')[0]).GetType() -ne [Microsoft.Win32.RegistryKey]) {
-        Write-Log -Text 'The supplied path does not correlate to a registry key.' -Type ERROR
+        Write-Log -Level Error -Text 'The supplied path does not correlate to a registry key.'
         return $null
     } elseif ((Get-Item -Path ($Destination -split '\\')[0]).GetType() -ne [Microsoft.Win32.RegistryKey]) {
-        Write-Log -Text 'The supplied destination does not correlate to a registry key.' -Type ERROR
+        Write-Log -Level Error -Text 'The supplied destination does not correlate to a registry key.'
         return $null
     } elseif (!(Test-Path -Path $Path)) {
-        Write-Log -Text "Path '$Path' does not exist." -Type ERROR
+        Write-Log -Level Error -Text "Path '$Path' does not exist."
         return $null
     } elseif (!(Test-Path -Path $Destination) -and $Force) {
-        Write-Log -Text "'$Destination' does not exist. Creating."
+        Write-Log -Level Error -Text "'$Destination' does not exist. Creating."
         New-Item -Path $Destination -Force | Out-Null
     } elseif (!(Test-Path -Path $Destination)) {
-        Write-Log -Text "Destination '$Destination' does not exist." -Type ERROR
+        Write-Log -Level Error -Text "Destination '$Destination' does not exist."
         return $null
     }
 
@@ -62,7 +62,7 @@ function Copy-RegistryItem {
         if (Copy-ItemProperty -Path $Path -Destination $Destination -Name $Name -PassThru) {
             return Get-Item -Path $Destination
         } else {
-            Write-Log -Message "An error occurred when writing the registry property: $($error[0].Exception.Message)" -Type ERROR
+            Write-Log -Level Error -Message "An error occurred when writing the registry property: $($error[0].Exception.Message)"
         }
     } else {
         return Copy-Item -Path $Path -Destination $Destination -Recurse:$Recurse -PassThru

@@ -12,7 +12,7 @@ function Install-Chocolatey {
         $env:Path = $env:Path + ";$($env:ALLUSERSPROFILE)\chocolatey\bin"
     }
     if (Test-Path -Path "$($env:ALLUSERSPROFILE)\chocolatey\bin") {
-        Write-Log -Text 'Chocolatey installation detected.' -Type LOG
+        Write-Log -Level Information -Text 'Chocolatey installation detected.'
         choco upgrade chocolatey -y | Out-Null
         choco feature enable -n=allowGlobalConfirmation -confirm | Out-Null
         choco feature disable -n=showNonElevatedWarnings -confirm | Out-Null
@@ -25,7 +25,7 @@ function Install-Chocolatey {
     }
 
     if (!(Test-Path -Path "$($env:ALLUSERSPROFILE)\chocolatey\bin")) {
-        Write-Log -Text 'Chocolatey installation failed.' -Type ERROR
+        Write-Log -Level Error -Text 'Chocolatey installation failed.'
         return 1
     }
     return 0

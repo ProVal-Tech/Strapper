@@ -43,15 +43,15 @@ function Set-RegistryKeyProperty {
     }
 
     if ((Get-Item -Path ($Path -split '\\')[0]).GetType() -ne [Microsoft.Win32.RegistryKey]) {
-        Write-Log -Text 'The supplied path does not correlate to a registry key.' -Type ERROR
+        Write-Log -Level Error -Text 'The supplied path does not correlate to a registry key.'
         return $null
     }
 
     if (!(Test-Path -Path $Path) -and $Force) {
-        Write-Log -Text "'$Path' does not exist. Creating."
+        Write-Log -Level Information -Text "'$Path' does not exist. Creating."
         New-Item -Path $Path -Force | Out-Null
     } elseif (!(Test-Path -Path $Path)) {
-        Write-Log -Text "'$Path' does not exist. Unable to create registry entry." -Type ERROR
+        Write-Log -Level Error -Text "'$Path' does not exist. Unable to create registry entry."
         return $null
     }
 
