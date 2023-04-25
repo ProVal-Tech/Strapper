@@ -7,7 +7,7 @@ $StrapperSession = [pscustomobject]@{
     IsElevated = $false
     LogsToDB = $true
     LogTable = $null
-    DBPath = "$PSScriptRoot\Strapper.db"
+    DBPath = "$PSScriptRoot/Strapper.db"
     Platform = [System.Environment]::OSVersion.Platform
 }
 
@@ -38,15 +38,15 @@ if ($StrapperSession.Platform -eq 'Win32NT') {
 }
 
 $enums = @(@(
-    "$PSScriptRoot\enums\StrapperLogLevel.ps1"
+    "$PSScriptRoot/Enums/StrapperLogLevel.ps1"
 ) | Get-ChildItem)
 
 $classes = @(@(
-    "$PSScriptRoot\classes\StrapperLog.ps1"
+    "$PSScriptRoot/Classes/StrapperLog.ps1"
 ) | Get-ChildItem)
 
-$publicFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Public\*.ps1" -Recurse )
-$privateFunctions = @( Get-ChildItem -Path "$PSScriptRoot\Private\*.ps1" -Recurse )
+$publicFunctions = @( Get-ChildItem -Path "$PSScriptRoot/Public/*.ps1" -Recurse )
+$privateFunctions = @( Get-ChildItem -Path "$PSScriptRoot/Private/*.ps1" -Recurse )
 foreach ($importTarget in @($enums + $classes + $publicFunctions + $privateFunctions)) {
     try {
         . $importTarget.FullName
@@ -58,14 +58,21 @@ foreach ($importTarget in @($enums + $classes + $publicFunctions + $privateFunct
 if(!(Test-Path -LiteralPath $StrapperSession.DBPath)) {
     [System.Data.SQLite.SQLiteConnection]::CreateFile($StrapperSession.DBPath)
 }
-
+if($IsLinux -or $IsMacOS) {
+    chmod 776 $StrapperSession.DBPath
+} else {
+    $dbPathAcl = Get-Acl -Path $StrapperSession.DBPath
+    $fsar = [System.Security.AccessControl.FileSystemAccessRule]::new("Everyone", "FullControl", "Allow")
+    $dbPathAcl.SetAccessRule($fsar)
+    Set-Acl -Path $StrapperSession.DBPath -AclObject $dbPathAcl
+}
 Export-ModuleMember -Variable StrapperSession
 
 # SIG # Begin signature block
 # MIInbwYJKoZIhvcNAQcCoIInYDCCJ1wCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCNJ353oCya4Eq6
-# K3Q7oF45yQEzIG/VdpLXf+goXnHS8aCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCwpesIeDlmBdwe
+# HoTik5RhH0hDm1TnF5OrqFSJMcQz5qCCILYwggXYMIIEwKADAgECAhEA5CcElfaM
 # kdbQ7HtJTqTfHDANBgkqhkiG9w0BAQsFADB+MQswCQYDVQQGEwJQTDEiMCAGA1UE
 # ChMZVW5pemV0byBUZWNobm9sb2dpZXMgUy5BLjEnMCUGA1UECxMeQ2VydHVtIENl
 # cnRpZmljYXRpb24gQXV0aG9yaXR5MSIwIAYDVQQDExlDZXJ0dW0gVHJ1c3RlZCBO
@@ -245,32 +252,32 @@ Export-ModuleMember -Variable StrapperSession
 # LmNvbSBDb2RlIFNpZ25pbmcgSW50ZXJtZWRpYXRlIENBIFJTQSBSMQIQeVwkxuz4
 # snsBAPX7/vbayDANBglghkgBZQMEAgEFAKCBhDAYBgorBgEEAYI3AgEMMQowCKAC
 # gAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisGAQQBgjcCAQsx
-# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCBc1Ozx5TsywdwLnH5lGqrf
-# A0JjNTNrsT//a1mBBbCCXzANBgkqhkiG9w0BAQEFAASCAYAswky4K4a9n68eJ7cq
-# 6GORgvTOwNynamSX/Re7hFYBqq2UxVfURgRHOHWsBvZUAf7gDUzMC3rJCiZobC54
-# J6qU9Zw/fmt7SFP5bWMwXdN8mH0PS3zS86luHItHRj2L/jE1EpttTxo4NqjiSYxF
-# Se6U8XT+WzU061hlU1Y2AY67jA3azqTUUHdwgZ6pwGYisU7ANTfieJBimrImhbK4
-# mPFDlU4oQ26iL5mPRMkkBWJrUL3rZ82j3kPFJBytTJ8w66azGec4E3LFdg4Cb7Po
-# RaRzqMskVXvd+pZvg0LLPcY0C39pz+TPnMs5ZoCt0FlFy59qR3jUFDCnKnTvuIu5
-# TJFMEMAyKl4cHi3yoZ3Bb82Mw0hevO/yjgRxYd1MMyYDfb6X19rQhifjWoKYPQsZ
-# hQoVz2OnVUj6CHgSO6P1sR7H2PrBXN1fo6q+w2xQnxHpMmxlvt7CXCAD97Rv77cn
-# asEdnHCFFRkYM7Cd5y2JKg4s+LhTypUbiBrwVPnMVESeu3yhggNMMIIDSAYJKoZI
+# DjAMBgorBgEEAYI3AgEVMC8GCSqGSIb3DQEJBDEiBCBeEJu4qKgXLuWzNfMC2DV1
+# Bgl4vZxCHA9gGY031sJqMDANBgkqhkiG9w0BAQEFAASCAYCVuQN6MiGp18Ju3LOZ
+# QuEPvnJI+XhsMXPHB52kGKWsxjV7Yn9RxYWxXIthdY1M6pAUjZE4lURDXfh6dBMg
+# AQOMqY7jssG0nq6KUdneX0dJRhu55u3vXaQZFB75sbAxc15gp67dxU8G8aRrENr/
+# 9wlSrP8JefX4suRmUt1/9QUyR76zIVDROIoKw6cXN6QE7GO2xT4Sc3aji6oknazH
+# NgK2mV+Hvs6PhpWORA4/mpHLYSw89mzji9onnLhyfK5WFWIwijQU6uCmtzGCOj3x
+# 1X3KIl1LloCjLPIqKFjbSam7GoXUUwuq+TzXcUJ/q41JvhmLI1Xp3STvbVze8M9Q
+# S/Q56KKeFD4gwwi4nhOA8+vPTWv93geUGEe6obterbdv74PyIWf+i1mhgXQrh7C0
+# Yqdk0f+crC+YA3AR9a5nK1uCXauHz3anilYBjAA6Oexollj6DH5vR13aObH0f2O5
+# +CMhTZ3gz30zQEUCD46wLe0c1ol9uHnNZEtH/JDyqqPyj12hggNMMIIDSAYJKoZI
 # hvcNAQkGMYIDOTCCAzUCAQEwgZIwfTELMAkGA1UEBhMCR0IxGzAZBgNVBAgTEkdy
 # ZWF0ZXIgTWFuY2hlc3RlcjEQMA4GA1UEBxMHU2FsZm9yZDEYMBYGA1UEChMPU2Vj
 # dGlnbyBMaW1pdGVkMSUwIwYDVQQDExxTZWN0aWdvIFJTQSBUaW1lIFN0YW1waW5n
 # IENBAhEAkDl/mtJKOhPyvZFfCDipQzANBglghkgBZQMEAgIFAKB5MBgGCSqGSIb3
-# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIzMDEyNTA0MzQyOVow
-# PwYJKoZIhvcNAQkEMTIEMFfO2nbIcqd3Q1JMY77kSIbVZDBRxKNVjdpphTb+OFXe
-# Ebq7No9jlzEmZGE/OrpulTANBgkqhkiG9w0BAQEFAASCAgAOYDfWXkuC/+33HoTb
-# KHH6bhLEOhgSEi68uh9Z8nFkY1/kBT4Qa6sG4zl9yWy6BCbHskhg2lYNl994N3Eq
-# ejFHJ+8Wlag6slUVM2HUs8QO+kho+E8Xapz7wb+PJwz3yzWXCH6vWj2zxkNwXDVm
-# wYsJG+0+5mXm0B8e6iAlOKag2EyHtNQ1Yc299MOrogkZHU7yy58lJXarkjIiI77A
-# 0OYSGX+Mx3+PIRvIshwOrEpTVdMaZ7jfNZAs0vwNeEPfdDP93def/HuCtTvF9lJF
-# avAyNrtUj8FA0M8uhnVerQIqa8FNn7tzCzt49z0JmOCuBeyHhH3tokld5n5d76vG
-# ENW3ZzcfnnMF4odkSxRE/jc+ametJUqrbvNBxWxYyfspiy6eVSa+MlaqlxjWLgF9
-# UpM1nhinfR5MxJk9KUpHUAOTP4s47vhvmtPEJlQYETkrB+8+kh10tgryLtWzh1LG
-# iIlyDs3/gzhMN9zycxw4Qt4LZftuijqmL/ltmolF6H/VpEc1oI/fCBttd+RRjVO/
-# VKhmKLF/4xbwE9GGOw45YLGFagfyKp2hXgyjtJaEOurBwC9YnfnunW2hxFcHGdPL
-# oP3BjHLkB3qmVxVOow0dzch7E3CqROZxzvAjnVZHLwZmo+Jd0t0ZT0H8ijcxuQeI
-# 33e9/vDokFvSeX42qs/xksXvNQ==
+# DQEJAzELBgkqhkiG9w0BBwEwHAYJKoZIhvcNAQkFMQ8XDTIzMDQyNTE0Mzg1MVow
+# PwYJKoZIhvcNAQkEMTIEMKjaJARCkiYwvvQCj+i5mFGBW4koDRM+vgbUlOwMY58b
+# BvalKhlhbZqhQkC29poyezANBgkqhkiG9w0BAQEFAASCAgBT7KFC43Ibh3GeKCgn
+# eNsIh9lUoLVeyzAqvV2sBBd/3jGqF4dps8WgsDa51LG36ZKSv86aTiyRpYTsD8ce
+# SzV16ad8JkMhGqG0MPzB3oyKJsFEfUEIvGS8dgzKWMSp99Yqr981dWmMMdrLe4ki
+# reEEMGUqcLh2LYflm0ofvLgFGllyJseaOvYFtAknGu9JRrywullHjJ/6mhJzg9ZT
+# Qw5qWzIHInUqM5my+CEBrn7l9e57DcjMqio108ps7U/4DIq2li6LA4WNKsn2SiGJ
+# iUMrwihLF2xRLQQ1I0/cBdSIb7nOFgLED+cqrnusbTENNeqJ049sKD9hosEvfwHb
+# XtJrxZNZUikUBaDXDqHBYJrASFPcJxWO6A8CyF5bMroJBDfPwR2uRz2xKuPRncxZ
+# NvTuZOMPZly+gGkFwMId39eobSCux5Pl3vy6fZc1ByCx3kexCwIbUdoNyz/8JelF
+# a+JpGhM1xZl47ZoPOAROflDo6TUyiNIg2VD5plaLrAovIVzEG4S9cz++9UnkSs4q
+# uchZTOQ3DBWo7FP1wmdylS554Lto7O1B1ZF0ruZoH71N02bmf2GS/EzKENUL4r1i
+# wzkY0iYDXj6ipF7N9ixqzzIWFJwJVavuThEhjOn0NezyRDtkOK8i785usG/mvydp
+# I4eRtTLhrgoZdCqxh1GbXXwwSw==
 # SIG # End signature block
