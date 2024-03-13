@@ -24,10 +24,6 @@ function Write-SQLiteLog {
         [Parameter()][ValidatePattern('^[a-zA-Z0-9\-_]+$')][string]$TableName = $StrapperSession.LogTable,
         [Parameter()][string]$DataSource = $StrapperSession.DBPath
     )
-    if($TableName -ne $StrapperSession.LogTable) {
-        $TableName = $TableName -replace '^', $StrapperSession.ScriptTitle
-    }
-    
     [System.Data.SQLite.SQLiteConnection]$sqliteConnection = New-SQLiteConnection -DataSource $DataSource -Open
     New-SQLiteLogTable -Name $TableName -Connection $sqliteConnection
     $sqliteCommand = $sqliteConnection.CreateCommand()

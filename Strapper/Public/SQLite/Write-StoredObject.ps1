@@ -32,7 +32,6 @@ function Write-StoredObject {
         if (!$TableName) {
             $TableName = 'data'
         }
-        $TableName = "$($StrapperSession.ScriptTitle)_$TableName"
         New-SQLiteObjectTable -Name $TableName -Connection $sqliteConnection -Clobber:$Clobber
         $sqliteCommand = $sqliteConnection.CreateCommand()
         $sqliteTransaction = $sqliteConnection.BeginTransaction()

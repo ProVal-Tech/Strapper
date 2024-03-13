@@ -27,7 +27,6 @@ function Get-StoredObject {
     if (!$TableName) {
         $TableName = 'data'
     }
-    $TableName = "$($StrapperSession.ScriptTitle)_$TableName"
     [System.Data.SQLite.SQLiteConnection]$sqliteConnection = New-SQLiteConnection -DataSource $DataSource -Open
     if (!(Get-SQLiteTable -Name $TableName -Connection $sqliteConnection)) {
         Write-Error -Message "No log table with the name '$TableName' was found in the database '$DataSource'" -ErrorAction Stop
