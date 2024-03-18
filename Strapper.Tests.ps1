@@ -97,6 +97,31 @@ Describe "Get-RegistryHivePath" {
     }
 }
 
+Describe "Get-UserRegistryKeyProperty" {
+    It "Gets a registry key value for all users" {
+        $regEntries = Get-UserRegistryKeyProperty -Path "Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders" -Name "Desktop"
+        $regEntries | Should -Not -BeNullOrEmpty
+        $firstUserEntry = $regEntries | Where-Object { $_.Hive -match "Users" } | Select-Object -First 1
+        $firstUserEntry | Should -Not -BeNullOrEmpty
+    }
+}
+
+Describe "Get-WebFile" {
+    BeforeAll {
+        $targetUri = "https://www.google.com/robots.txt"
+        $targetDownloadPath = ".\$(New-Guid).txt"
+        Remove-Item -Path $targetDownloadPath -Force -ErrorAction SilentlyContinue
+    }
+    AfterAll {
+        Remove-Item -Path $targetDownloadPath -Force -ErrorAction SilentlyContinue
+    }
+    It "Downloads a file and saves it to the target directory" {
+        $downloadedFile = Get-WebFile -Uri $targetUri -Path $targetDownloadPath -Clobber -PassThru
+        Write-Information -MessageData $downloadedFile.FullName -InformationAction Continue
+        $downloadedFile | Should -Exist
+    }
+}
+
 Describe 'Write-Log' {
     BeforeEach {
         $testGuid = New-Guid
