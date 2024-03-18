@@ -1,6 +1,6 @@
 # Strapper Functions
 
-## Public Functions
+## Functions
 
 ### [Copy-RegistryItem](./docs/Copy-RegistryItem.md)
 Copies a registry property or key to the target destination.
@@ -50,7 +50,6 @@ Writes text to a log file and the Information stream.
 ### [Write-StoredObject](./docs/Write-StoredObject.md)
 Write one or more objects to a Strapper object table.
 
-## Private Functions
 ### [Get-RegistryHivePath](./docs/Get-RegistryHivePath.md)
 Gets a list of registry hives from the local computer.
 

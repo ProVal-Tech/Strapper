@@ -3,3 +3,5 @@ Strapper.db
 SQLite.NET.chm
 SignModule.ps1
 PublishModule.ps1
+Output/*
+*-log.txt

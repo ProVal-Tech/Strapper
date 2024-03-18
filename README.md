@@ -21,10 +21,14 @@ Install from the PS Gallery
 Install-Module -Name Strapper -Force
 ```
 
-### Alternative Install
+### Alternative Install (Requires [Module Builder](https://github.com/PoshCode/ModuleBuilder))
 
 ```powershell
-git clone "https://github.com/ProVal-Tech/Strapper" (Join-Path ($env:PSModulePath -split $(if(!$IsWindows) {':'} else {';'}) | Select-Object -First 1) "Strapper\1.4.5")
+git clone "https://github.com/ProVal-Tech/Strapper"
+Push-Location -Path "./Strapper"
+Remove-Item -Path ./Output -Recurse -Force -ErrorAction SilentlyContinue
+$buildLocation = Build-Module -SourcePath ./Strapper -PassThru
+Copy-Item -Path ./Strapper/Libraries -Destination $buildLocation.ModuleBase -Recurse
 ```
 
 ## Usage
