@@ -19,8 +19,8 @@ function Write-Log {
     #>
     [CmdletBinding(DefaultParameterSetName = 'Level')]
     param (
-        [Parameter(Mandatory, Position = 0)][AllowEmptyString()][Alias('Message')]
-        [string]$Text,
+        [Parameter(ValueFromPipeline, Mandatory, Position = 0)][Alias('Message', 'Text')]
+        [object]$InputObject,
         [Parameter(Mandatory, DontShow, ParameterSetName = 'Type')]
         [string]$Type,
         [Parameter(ParameterSetName = 'Level')]
@@ -36,6 +36,7 @@ function Write-Log {
         $StrapperSession.LogPath = Join-Path -Path $location -ChildPath "$((Get-Date).ToString('yyyyMMdd'))-log.txt"
         $StrapperSession.ErrorPath = Join-Path -Path $location -ChildPath "$((Get-Date).ToString('yyyyMMdd'))-error.txt"
     }
+    $Text = $InputObject.ToString()
 
     # Accounting for -Type to allow for backwards compatibility.
     if ($Type) {
