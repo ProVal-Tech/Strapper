@@ -140,4 +140,8 @@ Describe 'Write-Log' {
         Write-Log -Text $testGuid
         Get-StrapperLog | Select-Object -ExpandProperty Message -Last 1 | Should -Not -Be $testGuid
     }
+    It 'Writes a log file entry from a pipeline object' {
+        $testGuid | Write-Log
+        Get-Content -Path $StrapperSession.LogPath | Select-Object -Last 1 | Should -Match "$testGuid$"
+    }
 }
