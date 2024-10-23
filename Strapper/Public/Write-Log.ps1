@@ -20,7 +20,7 @@ function Write-Log {
     [CmdletBinding(DefaultParameterSetName = 'Level')]
     param (
         [Parameter(ValueFromPipeline, Mandatory, Position = 0)][Alias('Message', 'Text')]
-        [object]$InputObject,
+        [object[]]$InputObject,
         [Parameter(Mandatory, DontShow, ParameterSetName = 'Type')]
         [string]$Type,
         [Parameter(ParameterSetName = 'Level')]
@@ -31,80 +31,85 @@ function Write-Log {
         [Parameter()]
         [System.Management.Automation.ErrorCategory]$ErrorCategory = [System.Management.Automation.ErrorCategory]::NotSpecified
     )
-    if (!($StrapperSession.LogPath -and $StrapperSession.ErrorPath)) {
-        $location = (Get-Location).Path
-        $StrapperSession.LogPath = Join-Path -Path $location -ChildPath "$((Get-Date).ToString('yyyyMMdd'))-log.txt"
-        $StrapperSession.ErrorPath = Join-Path -Path $location -ChildPath "$((Get-Date).ToString('yyyyMMdd'))-error.txt"
-    }
-    $Text = $InputObject.ToString()
-
-    # Accounting for -Type to allow for backwards compatibility.
-    if ($Type) {
-        switch ($Type) {
-            'LOG' { $Level = [StrapperLogLevel]::Information }
-            'WARN' { $Level = [StrapperLogLevel]::Warning }
-            'ERROR' { $Level = [StrapperLogLevel]::Error }
-            'SUCCESS' { $Level = [StrapperLogLevel]::Information }
-            'DATA' { $Level = [StrapperLogLevel]::Information }
-            'INIT' { $Level = [StrapperLogLevel]::Debug }
-            Default { $Level = [StrapperLogLevel]::Information }
+    begin {
+        if (!($StrapperSession.LogPath -and $StrapperSession.ErrorPath)) {
+            $location = (Get-Location).Path
+            $StrapperSession.LogPath = Join-Path -Path $location -ChildPath "$((Get-Date).ToString('yyyyMMdd'))-log.txt"
+            $StrapperSession.ErrorPath = Join-Path -Path $location -ChildPath "$((Get-Date).ToString('yyyyMMdd'))-error.txt"
         }
-    } else {
-        [StrapperLogLevel]$Level = $Level
-    }
-    
-    switch ([StrapperLogLevel]$Level) {
-        ([StrapperLogLevel]::Verbose) {
-            $levelShortName = 'VER'
-            Write-Verbose -Message $Text
-            break
-        }
-        ([StrapperLogLevel]::Debug) {
-            $levelShortName = 'DBG'
-            Write-Debug -Message $Text
-            break
-        }
-        ([StrapperLogLevel]::Information) {
-            $levelShortName = 'INF'
-            Write-Information -MessageData $Text
-            break
-        }
-        ([StrapperLogLevel]::Warning) {
-            $levelShortName = 'WRN'
-            Write-Warning -Message $Text
-            break
-        }
-        ([StrapperLogLevel]::Error) {
-            $levelShortName = 'ERR'
-            if ($Exception) {
-                Write-Error -Message $Text -Exception $Exception -Category $ErrorCategory
-                break
+        # Accounting for -Type to allow for backwards compatibility.
+        if ($Type) {
+            switch ($Type) {
+                'LOG' { $Level = [StrapperLogLevel]::Information }
+                'WARN' { $Level = [StrapperLogLevel]::Warning }
+                'ERROR' { $Level = [StrapperLogLevel]::Error }
+                'SUCCESS' { $Level = [StrapperLogLevel]::Information }
+                'DATA' { $Level = [StrapperLogLevel]::Information }
+                'INIT' { $Level = [StrapperLogLevel]::Debug }
+                Default { $Level = [StrapperLogLevel]::Information }
             }
-            Write-Error -Message $Text -Category $ErrorCategory
-            break
+        } else {
+            [StrapperLogLevel]$Level = $Level
         }
-        ([StrapperLogLevel]::Fatal) {
-            $levelShortName = 'FTL'
-            if ($Exception) {
-                Write-Error -Message $Text -Category $ErrorCategory -Exception $Exception
-                break
+    }
+    process {
+        foreach ($item in $InputObject) {
+            $Text = $item.ToString()
+            switch ([StrapperLogLevel]$Level) {
+                ([StrapperLogLevel]::Verbose) {
+                    $levelShortName = 'VER'
+                    Write-Verbose -Message $Text
+                    break
+                }
+                ([StrapperLogLevel]::Debug) {
+                    $levelShortName = 'DBG'
+                    Write-Debug -Message $Text
+                    break
+                }
+                ([StrapperLogLevel]::Information) {
+                    $levelShortName = 'INF'
+                    Write-Information -MessageData $Text
+                    break
+                }
+                ([StrapperLogLevel]::Warning) {
+                    $levelShortName = 'WRN'
+                    Write-Warning -Message $Text
+                    break
+                }
+                ([StrapperLogLevel]::Error) {
+                    $levelShortName = 'ERR'
+                    if ($Exception) {
+                        Write-Error -Message $Text -Exception $Exception -Category $ErrorCategory
+                        break
+                    }
+                    Write-Error -Message $Text -Category $ErrorCategory
+                    break
+                }
+                ([StrapperLogLevel]::Fatal) {
+                    $levelShortName = 'FTL'
+                    if ($Exception) {
+                        Write-Error -Message $Text -Category $ErrorCategory -Exception $Exception
+                        break
+                    }
+                    Write-Error -Message $Text -Category $ErrorCategory
+                    break
+                }
+                Default {
+                    $levelShortName = 'UNK'
+                    Write-Information -MessageData $Text
+                }
             }
-            Write-Error -Message $Text -Category $ErrorCategory
-            break
-        }
-        Default {
-            $levelShortName = 'UNK'
-            Write-Information -MessageData $Text
-        }
-    }
-    $formattedLog = "$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss.fff zzz')) [$levelShortName] $Text"
-    Add-Content -Path $StrapperSession.logPath -Value $formattedLog
-    if ([StrapperLogLevel]$Level -ge [StrapperLogLevel]::Error) {
-        Add-Content -Path $StrapperSession.ErrorPath -Value $formattedLog
-    }
+                
+            $formattedLog = "$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss.fff zzz')) [$levelShortName] $Text"
+            Add-Content -Path $StrapperSession.logPath -Value $formattedLog
+            if ([StrapperLogLevel]$Level -ge [StrapperLogLevel]::Error) {
+                Add-Content -Path $StrapperSession.ErrorPath -Value $formattedLog
+            }
 
-    if($StrapperSession.LogsToDB) {
-        Write-SQLiteLog -Message $Text -Level $Level
+            if ($StrapperSession.LogsToDB) {
+                Write-SQLiteLog -Message $Text -Level $Level
+            }
+        }
     }
 }
 
