@@ -14,6 +14,9 @@ Get objects representing Strapper logs from a database.
 ### [Get-StrapperWorkingPath](./docs/Get-StrapperWorkingPath.md)
 Returns the working path of the current script using Strapper.
 
+### [Get-UserRegistryItemy](./docs/Get-UserRegistryItem.md)
+Retrieves a list of user-specific registry properties and their values.
+
 ### [Get-UserRegistryKeyProperty](./docs/Get-UserRegistryKeyProperty.md)
 Gets a list of existing user registry properties.
 
