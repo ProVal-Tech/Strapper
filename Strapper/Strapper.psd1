@@ -4,7 +4,7 @@
     RootModule = 'Strapper.psm1'
 
     # Version number of this module.
-    ModuleVersion = '1.6.2'
+    ModuleVersion = '1.7.0'
 
     # ID used to uniquely identify this module
     GUID = '6fe5cf06-7b4f-4695-b022-1ca2feb0341f'
