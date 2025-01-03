@@ -14,6 +14,9 @@ Get objects representing Strapper logs from a database.
 ### [Get-StrapperWorkingPath](./docs/Get-StrapperWorkingPath.md)
 Returns the working path of the current script using Strapper.
 
+### [Get-UserRegistryItemy](./docs/Get-UserRegistryItem.md)
+Retrieves a list of user-specific registry properties and their values.
+
 ### [Get-UserRegistryKeyProperty](./docs/Get-UserRegistryKeyProperty.md)
 Gets a list of existing user registry properties.
 
@@ -31,6 +34,9 @@ Run a PowerShell script from a local or remote path.
 
 ### [Publish-GitHubModule](./docs/Publish-GitHubModule.md)
 Publish a PowerShell module to a GitHub repository.
+
+### [Remove-UserRegistryItem](./docs/Remove-UserRegistryItem.md)
+Deletes specific registry property values or keys for all existing user registry hives.
 
 ### [Remove-UserRegistryKeyProperty](./docs/Remove-UserRegistryKeyProperty.md)
 Removes a registry property value for existing user registry hives.

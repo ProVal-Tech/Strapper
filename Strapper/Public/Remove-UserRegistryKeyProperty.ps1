@@ -63,7 +63,7 @@ function Remove-UserRegistryKeyProperty {
 
         # Log the success or failure status of the removal.
         if ($?) {
-            Write-Log -Level Information -Text "Removed the requested registry entry for user '$($profile.Username)'" -Type LOG
+            Write-Log -Level Information -Text "Removed the requested registry entry for user '$($profile.Username)'"
         } else {
             Write-Log -Level Error -Text "Failed to remove the requested registry entry for user '$($profile.Username)'"
         }
