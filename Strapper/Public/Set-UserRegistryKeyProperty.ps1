@@ -103,22 +103,22 @@ function Set-UserRegistryKeyProperty {
             }
             if ($Type) { $parameters.Add('Type', $Type) }
 
-            # Set the target registry entry
-            $returnEntry = Set-RegistryKeyProperty @parameters | Select-Object -ExpandProperty $Name
-
-            # If the set was successful, then pass back the return entry from Set-RegistryKeyProperty
-            if ($returnEntry) {
-                [PSCustomObject]@{
-                    Username = $profile.Username
-                    SID = $profile.SID
-                    Path = $propertyPath
-                    Hive = $profile.UserHive
-                    Name = $Name
-                    Value = $returnEntry
-                }
-            } else {
-                Write-Log -Level Warning -Text "Failed to set the requested registry entry for user '$($profile.Username)'"
-            }
+             # Set the target registry entry
+             $returnEntry = Set-RegistryKeyProperty @parameters
+ 
+             # If the set was successful, then pass back the return entry from Set-RegistryKeyProperty
+             if ($returnEntry | Get-Member -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $Name -and $_.MemberType -eq 'NoteProperty' }) {
+               [PSCustomObject]@{
+                   Username = $profile.Username
+                   SID = $profile.SID
+                   Path = $propertyPath
+                   Hive = $profile.UserHive
+                   Name = $Name
+                   Value = $returnEntry.$Name
+               }
+             } else {
+               Write-Log -Level Warning -Text "Failed to set the requested registry entry for user '$($profile.Username)'"
+             }
 
             # Collect garbage and close ntuser.dat if the hive was initially unloaded
             if ($profile.SID -in $UnloadedHives.SID) {
