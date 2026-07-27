@@ -20,7 +20,7 @@ function Set-StrapperEnvironment {
     Write-Log -Text ('System: {0}' -f [Environment]::MachineName) -Level Debug
     Write-Log -Text ('User: {0}' -f [Environment]::UserName) -Level Debug
     Write-Log -Text ('OS Bitness: {0}' -f (32, 64)[[Environment]::Is64BitOperatingSystem]) -Level Debug
-    Write-Log -Text ('PowerShell Bitness: {0}' -f (if ([Environment]::Is64BitProcess) { 64 } else { 32 })) -Level Debug
-    Write-Log -Text ('PowerShell Version: {0}' -f (Get-Host | Select-Object -ExpandProperty Version | Select-Object -ExpandProperty Major)) -Level Debug
+    Write-Log -Text ('PowerShell Bitness: {0}' -f $(if ([Environment]::Is64BitProcess) { 64 } else { 32 })) -Level Debug
+    Write-Log -Text ('PowerShell Version: {0}' -f $(Get-Host | Select-Object -ExpandProperty Version | Select-Object -ExpandProperty Major)) -Level Debug
     #endregion
 }
