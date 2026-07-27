@@ -44,6 +44,9 @@ Removes a registry property value for existing user registry hives.
 ### [Set-RegistryKeyProperty](./docs/Set-RegistryKeyProperty.md)
 Sets a Windows registry property value.
 
+### [Set-StrapperDatabasePermission](./docs/Set-StrapperDatabasePermissions.md)
+Grants modify permissions to the BUILTIN Users group for the Strapper module directory and any existing database files.
+
 ### [Set-StrapperEnviornment](./docs/Set-StrapperEnviornment.md)
 Removes error and data files from the current working path and writes initialization information to the log.
 
