@@ -4,7 +4,7 @@
     RootModule = 'Strapper.psm1'
 
     # Version number of this module.
-    ModuleVersion = '1.7.1.2'
+    ModuleVersion = '1.7.2.0'
 
     # ID used to uniquely identify this module
     GUID = '6fe5cf06-7b4f-4695-b022-1ca2feb0341f'
@@ -57,7 +57,7 @@ PrivateData = @{
         IconUri = 'https://raw.githubusercontent.com/ProVal-Tech/Strapper/main/res/img/strapper.png'
 
         # ReleaseNotes of this module
-        ReleaseNotes = ''
+        ReleaseNotes = 'Added Set-StrapperDatabasePermissions to resolve SQLite journaling issues for non-admin users.'
 
         # Prerelease string of this module
         Prerelease = ''
