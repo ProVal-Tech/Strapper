@@ -55,7 +55,6 @@ function Set-StrapperDatabasePermissions {
 
             return $true
         } catch {
-            Write-Log -Text ('Failed to set permissions on {0}. Reason: {1}' -f $Path, $Error[0].Exception.Message) -Level Error
             return $false
         }
     }
