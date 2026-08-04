@@ -13,7 +13,7 @@ function Set-StrapperEnvironment {
     param ()
 
     #region main
-    Set-StrapperDatabasePermissions
+    Set-StrapperDatabasePermissions -ErrorAction SilentlyContinue
 
     Remove-Item -Path $StrapperSession.ErrorPath -Force -ErrorAction SilentlyContinue
     Write-Log -Text $StrapperSession.ScriptTitle -Level Debug
